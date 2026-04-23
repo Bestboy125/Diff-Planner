@@ -46,6 +46,7 @@ struct MappingParameters
   int pose_type_;
   bool enable_virtual_wall_;
   double virtual_ceil_, virtual_ground_;
+  double init_x_, init_y_, init_z_;
 
   /* camera parameters */
   double cx_, cy_, fx_, fy_;
@@ -61,8 +62,12 @@ struct MappingParameters
   int skip_pixel_;
 
   /* raycasting */
-  double p_hit_, p_miss_, p_min_, p_max_, p_occ_;                                           // occupancy probability
-  double prob_hit_log_, prob_miss_log_, clamp_min_log_, clamp_max_log_, min_occupancy_log_; // logit of occupancy probability
+  double p_hit_, p_miss_, p_min_, p_max_, p_occ_;                                           // occupancy probability (depth)
+  double prob_hit_log_, prob_miss_log_, clamp_min_log_, clamp_max_log_, min_occupancy_log_; // logit of occupancy probability (depth)
+  double lidar_p_hit_, lidar_p_miss_, lidar_p_free_, lidar_p_min_, lidar_p_max_, lidar_p_occ_; // occupancy probability (cloud)
+  double lidar_prob_hit_log_, lidar_prob_miss_log_, lidar_clamp_min_log_,
+      lidar_clamp_max_log_, lidar_min_occupancy_log_; // logit of occupancy probability (cloud)
+  bool cloud_enable_raycast_;
   double min_ray_length_;                                                                   // range of doing raycasting
   double fading_time_;
 
@@ -112,6 +117,7 @@ struct MappingData
   bool occ_need_update_, local_updated_;
   bool has_first_depth_;
   bool has_odom_;
+  bool use_lidar_prob_for_update_;
 
   // odom_depth_timeout_
   ros::Time last_occ_update_time_;
@@ -281,9 +287,12 @@ inline void GridMap::changeInfBuf(const bool dir, const int inf_buf_idx, const E
             --md_.occupancy_buffer_inflate_[id_inf_buf];
             if (md_.occupancy_buffer_inflate_[id_inf_buf] > 65000) // An error case
             {
+              t1 = ros::Time::now();
               ROS_ERROR("A negtive value of nearby obstacle number! reset the map.");
               fill(md_.occupancy_buffer_.begin(), md_.occupancy_buffer_.end(), mp_.clamp_min_log_);
               fill(md_.occupancy_buffer_inflate_.begin(), md_.occupancy_buffer_inflate_.end(), 0L);
+              t2 = ros::Time::now();
+              ROS_WARN("reset the map time: t2-t1=%f", (t2 - t1).toSec());
             }
           }
 
@@ -307,9 +316,13 @@ inline void GridMap::changeInfBuf(const bool dir, const int inf_buf_idx, const E
           --md_.occupancy_buffer_inflate_[id_inf_buf];
           if (md_.occupancy_buffer_inflate_[id_inf_buf] > 65000) // An error case
           {
+            ros::Time t1, t2;
+            t1 = ros::Time::now();
             ROS_ERROR("A negtive value of nearby obstacle number! reset the map.");
             fill(md_.occupancy_buffer_.begin(), md_.occupancy_buffer_.end(), mp_.clamp_min_log_);
             fill(md_.occupancy_buffer_inflate_.begin(), md_.occupancy_buffer_inflate_.end(), 0L);
+            t2 = ros::Time::now();
+            ROS_WARN("reset the map time: t2-t1=%f", (t2 - t1).toSec());
           }
         }
 #endif

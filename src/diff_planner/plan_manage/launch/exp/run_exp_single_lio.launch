@@ -1,6 +1,6 @@
 <launch>
     <arg name="odom_topic" value="/ekf/ekf_odom"/>
-    <arg name="drone_id"  value="$(env DRONE_ID)"/>
+    <arg name="drone_id"  value="0"/>
     <include file="$(find diff_planner)/launch/include/advanced_param_exp.xml">
         <arg name="odom_topic" value="$(arg odom_topic)"/>
         <arg name="drone_id" value="$(arg drone_id)"/>
@@ -30,29 +30,32 @@
         <arg name="enable_virtual_wall" value="true"/>
         <arg name="virtual_ceil" value="2.0"/>
         <arg name="virtual_ground" value="0.1"/>
-        <arg name="map_resolution" value="0.15"/>
-        <arg name="inflation_size" value="0.3"/>
+        <arg name="map_resolution" value="0.2"/>
+        <arg name="inflation_size" value="0.4"/>
+        <arg name="init_x"     value="0"/>
+		<arg name="init_y"     value="0"/>
+		<arg name="init_z"     value="0"/>
         <!-- 1: use 2D Nav Goal to select goal  -->
         <!-- 2: use global waypoints below  -->
         <arg name="flight_type" value="1" />
         <!-- global waypoints -->
         <!-- It generates a piecewise min-snap traj passing all waypoints -->
-        <arg name="point_num" value="2" />
-        <arg name="point0_x" value="8" />
-        <arg name="point0_y" value="0" />
-        <arg name="point0_z" value="1" />
-        <arg name="point1_x" value="0" />
-        <arg name="point1_y" value="0" />
-        <arg name="point1_z" value="1" />
+        <arg name="point_num" value="1" />
+        <arg name="point0_x" value="1.0" />
+        <arg name="point0_y" value="0.0" />
+        <arg name="point0_z" value="0.0" />
+        <arg name="point1_x" value="0.0" />
+        <arg name="point1_y" value="0.0" />
+        <arg name="point1_z" value="0.0" />
         <arg name="point2_x" value="0.0" />
-        <arg name="point2_y" value="30.0" />
-        <arg name="point2_z" value="1.0" />
-        <arg name="point3_x" value="-30.0" />
+        <arg name="point2_y" value="0.0" />
+        <arg name="point2_z" value="0.0" />
+        <arg name="point3_x" value="0.0" />
         <arg name="point3_y" value="0.0" />
-        <arg name="point3_z" value="1.0" />
+        <arg name="point3_z" value="0.0" />
         <arg name="point4_x" value="0.0" />
         <arg name="point4_y" value="0.0" />
-        <arg name="point4_z" value="1.0" />
+        <arg name="point4_z" value="0.0" />
     </include>
 
     <node pkg="diff_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
@@ -61,6 +64,8 @@
         <remap from="~planning/yaw" to="/drone_$(arg drone_id)_planning/yaw"/>
         <remap from="~heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat"/>
         <param name="traj_server/time_forward" value="1.0" type="double"/>
+        <param name="traj_server/yaw_dot_max" value="3.14" type="double"/>
+        <param name="traj_server/yaw_dot_dot_max" value="15.71" type="double"/>
     </node>
 
 </launch>

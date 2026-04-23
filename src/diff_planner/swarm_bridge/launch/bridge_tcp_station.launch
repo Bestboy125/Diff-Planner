@@ -6,19 +6,14 @@
 
     <param name="self_id" value="$(arg station_id)"/>
     <param name="is_ground_station" value="true"/>
-    <param name="drone_num" value="10"/>
-    <param name="drone_ip_0" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_1" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_2" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_3" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_4" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_5" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_6" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_7" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_8" value="127.0.0.1" type="string"/>
-    <param name="drone_ip_9" value="127.0.0.1" type="string"/>
+    <param name="drone_num" value="$(env DRONE_NUM)"/>
+    <param name="drone_ip_0" value="$(env DRONE_IP_0)" type="string"/>
+    <param name="drone_ip_1" value="$(env DRONE_IP_1)" type="string"/>
+    <param name="drone_ip_2" value="$(env DRONE_IP_2)" type="string"/>
+    <param name="drone_ip_3" value="$(env DRONE_IP_3)" type="string"/>
+    <param name="drone_ip_4" value="$(env DRONE_IP_4)" type="string"/>
     <param name="ground_station_num" value="1"/>
-    <param name="ground_station_ip_0" value="127.0.0.1" type="string"/>
+    <param name="ground_station_ip_0" value="$(env GS_IP)" type="string"/>
 
   </node>
 

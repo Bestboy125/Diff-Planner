@@ -1,7 +1,7 @@
 <launch>
     <arg name="odom_topic" value="/vins/imu_propagate" />
     <arg name="next_distance" value="0.7" />
-    <arg name="fligt_type" value="4" />   <!-- 1到4代表4种控制模式 -->
+    <arg name="fligt_type" value="1" />   <!-- 1到4代表4种控制模式 -->
     <arg name="start_plan" value="1" />   <!-- 1表示启动多点规划，0表示不启动 -->
     <arg name="back_plan" value="1" />   <!-- 1表示启动回城多点规划，0表示不启动 -->
    

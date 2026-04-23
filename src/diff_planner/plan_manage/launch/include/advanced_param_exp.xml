@@ -37,6 +37,9 @@
     <arg name="point4_z"/>
     <arg name="flight_type"/>
     <arg name="drone_id"/>
+    <arg name="init_x"/>
+	<arg name="init_y"/>
+	<arg name="init_z"/>
     <!-- main node -->
     <!-- <node pkg="diff_planner" name="diff_planner_node" type="diff_planner_node" output="screen" launch-prefix="valgrind"> -->
     <node pkg="diff_planner" name="drone_$(arg drone_id)_diff_planner_node" type="diff_planner_node" output="screen">
@@ -45,7 +48,7 @@
         <remap from="~planning/trajectory" to = "/drone_$(arg drone_id)_planning/trajectory"/>
         <remap from="~planning/data_display" to = "/drone_$(arg drone_id)_planning/data_display"/>
         <remap from="~planning/broadcast_traj_send" to = "/broadcast_traj_from_planner"/>
-        <remap from="~planning/broadcast_traj_recv" to = "/bridge/broadcast_traj_from_planner"/>
+        <remap from="~planning/broadcast_traj_recv" to = "/broadcast_traj_to_planner"/>
         <remap from="~planning/heartbeat" to = "/drone_$(arg drone_id)_traj_server/heartbeat"/>
         <remap from="~grid_map/odom" to="$(arg odom_topic)"/>
         <remap from="~grid_map/cloud" to="$(arg cloud_topic)"/>
@@ -56,7 +59,7 @@
         <param name="fsm/thresh_replan_time" value="1.0" type="double"/>
         <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/>
         <!--always set to 1.5 times grater than sensing horizen-->
-        <param name="fsm/emergency_time" value="1.0" type="double"/>
+        <param name="fsm/emergency_time" value="0.8" type="double"/>
         <param name="fsm/realworld_experiment" value="true"/>
         <param name="fsm/fail_safe" value="true"/>
         <!-- Allow final goal modification -->
@@ -85,8 +88,8 @@
         <param name="grid_map/local_update_range_z" value="$(arg local_map_size_z)" /> <!-- different meaning between grid_map.cpp and grid_map_bigmap.cpp -->
         <param name="grid_map/obstacles_inflation" value="$(arg inflation_size)" />
         <param name="grid_map/enable_virtual_wall" value="$(arg enable_virtual_wall)"/>
-        <param name="grid_map/virtual_ceil" value="3.0"/>
-        <param name="grid_map/virtual_ground" value="-0.1"/>
+        <param name="grid_map/virtual_ceil" value="$(arg virtual_ceil)"/>
+        <param name="grid_map/virtual_ground" value="$(arg virtual_ground)"/>
         <param name="grid_map/ground_height" value="-0.01"/>
         <!-- camera parameter -->
         <param name="grid_map/cx" value="$(arg cx)"/>
@@ -107,13 +110,26 @@
         <param name="grid_map/p_min" value="0.12"/>
         <param name="grid_map/p_max" value="0.90"/>
         <param name="grid_map/p_occ" value="0.80"/>
-        <param name="grid_map/fading_time" value="1000.0"/>
+        <param name="grid_map/lidar_p_hit" value="0.9"/>
+        <param name="grid_map/lidar_p_miss" value="0.49"/>
+        <param name="grid_map/lidar_p_min" value="0.12"/>
+        <param name="grid_map/lidar_p_max" value="0.98"/>
+        <param name="grid_map/lidar_p_occ" value="0.85"/>
+        <param name="grid_map/cloud_enable_raycast" value="true"/>
+        <!-- when use lidar fading_time = -1.0  -->
+        <!-- when use vio fading_time = 1000  -->
+        <param name="grid_map/fading_time" value="1.0"/>
         <param name="grid_map/min_ray_length" value="0.1"/>
         <param name="grid_map/max_ray_length" value="4.5"/>
         <param name="grid_map/visualization_truncate_height" value="1.9"/>
         <param name="grid_map/show_occ_time" value="false"/>
         <param name="grid_map/pose_type" value="2"/>
         <param name="grid_map/frame_id" value="world"/>
+
+        <param name="grid_map/init_x" value="$(arg init_x)" />
+        <param name="grid_map/init_y" value="$(arg init_y)" />
+        <param name="grid_map/init_z" value="$(arg init_z)" />
+        
         <!-- planner manager -->
         <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
         <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>

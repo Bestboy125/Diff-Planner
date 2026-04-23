@@ -1,5 +1,5 @@
 <launch>
-    <arg name="odom_topic" value="/vins/imu_propagate"/>
+    <arg name="odom_topic" value="/ekf/ekf_odom"/>
     <arg name="drone_id"  value="$(env DRONE_ID)"/>
     <include file="$(find diff_planner)/launch/include/advanced_param_exp.xml">
         <arg name="odom_topic" value="$(arg odom_topic)"/>
@@ -8,15 +8,15 @@
         <!-- depth topic: depth image, 640x480 by default -->
         <!-- don't set cloud_topic if you already set these ones! -->
         <arg name="camera_pose_topic" value="no_use0"/>
-        <arg name="depth_topic" value="/camera/depth/image_rect_raw"/>
+        <arg name="depth_topic" value="no_use1"/>
         <!-- topic of point cloud measurement, such as from LIDAR  -->
         <!-- don't set camera pose and depth, if you already set this one! -->
-        <arg name="cloud_topic" value="no_use2"/>
+        <arg name="cloud_topic" value="/laserMapping/cloud_registered"/>
         <!-- intrinsic params of the depth camera -->
-        <arg name="cx" value="322.0597839355469"/>
-        <arg name="cy" value="235.91989135742188"/>
-        <arg name="fx" value="390.4934997558594"/>
-        <arg name="fy" value="390.4934997558594"/>
+        <arg name="cx" value="319.31427001953125"/>
+        <arg name="cy" value="239.09725952148438"/>
+        <arg name="fx" value="386.2706298828125"/>
+        <arg name="fy" value="386.2706298828125"/>
         <!-- maximum velocity, acceleration and jerk the drone will reach -->
         <arg name="max_vel" value="0.5" />
         <arg name="max_acc" value="3.0" />
@@ -33,31 +33,31 @@
         <arg name="map_resolution" value="0.15"/>
         <arg name="inflation_size" value="0.3"/>
 
-        <arg name="init_x"     value="0"/>
-		<arg name="init_y"     value="0"/>
-		<arg name="init_z"     value="0"/>
-
+        <arg name="init_x"     value="$(env INIT_X)"/>
+		<arg name="init_y"     value="$(env INIT_Y)"/>
+		<arg name="init_z"     value="$(env INIT_Z)"/>
+        
         <!-- 1: use 2D Nav Goal to select goal  -->
         <!-- 2: use global waypoints below  -->
-        <arg name="flight_type" value="1" />
+        <arg name="flight_type" value="$(env FLIGHT_TYPE)" />
         <!-- global waypoints -->
         <!-- It generates a piecewise min-snap traj passing all waypoints -->
-        <arg name="point_num" value="1" />
-        <arg name="point0_x" value="3.0" />
-        <arg name="point0_y" value="0.0" />
-        <arg name="point0_z" value="1.0" />
-        <arg name="point1_x" value="0.0" />
-        <arg name="point1_y" value="0.0" />
-        <arg name="point1_z" value="1.0" />
-        <arg name="point2_x" value="0.0" />
-        <arg name="point2_y" value="0.0" />
-        <arg name="point2_z" value="1.0" />
-        <arg name="point3_x" value="0.0" />
-        <arg name="point3_y" value="0.0" />
-        <arg name="point3_z" value="1.0" />
-        <arg name="point4_x" value="0.0" />
-        <arg name="point4_y" value="0.0" />
-        <arg name="point4_z" value="1.0" />
+        <arg name="point_num" value="$(env POINT_NUM)" />
+        <arg name="point0_x" value="$(env POINT0_X)" />
+        <arg name="point0_y" value="$(env POINT0_Y)" />
+        <arg name="point0_z" value="$(env POINT0_Z)" />
+        <arg name="point1_x" value="$(env POINT1_X)" />
+        <arg name="point1_y" value="$(env POINT1_Y)" />
+        <arg name="point1_z" value="$(env POINT1_Z)" />
+        <arg name="point2_x" value="$(env POINT2_X)" />
+        <arg name="point2_y" value="$(env POINT2_Y)" />
+        <arg name="point2_z" value="$(env POINT2_Z)" />
+        <arg name="point3_x" value="$(env POINT3_X)" />
+        <arg name="point3_y" value="$(env POINT3_Y)" />
+        <arg name="point3_z" value="$(env POINT3_Z)" />
+        <arg name="point4_x" value="$(env POINT4_X)" />
+        <arg name="point4_y" value="$(env POINT4_Y)" />
+        <arg name="point4_z" value="$(env POINT4_Z)" />
     </include>
 
     <node pkg="diff_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">

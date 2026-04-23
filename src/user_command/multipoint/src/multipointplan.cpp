@@ -6,9 +6,25 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <quadrotor_msgs/PositionCommand.h>
 #include <quadrotor_msgs/TakeoffLand.h>
+#include <quadrotor_msgs/Px4ctrlState.h>
 #include <mavros_msgs/RCIn.h>
 
 using namespace std;
+
+bool px4_is_auto_hover = false;
+
+uint8_t px4_historical_status = quadrotor_msgs::Px4ctrlState::MANUAL_CTRL;
+
+// button-press state for RC channel 8 (now a momentary switch)
+// start as "not pressed" because initial state is UP (unpressed)
+bool rc_button_prev = false;
+
+// timestamp of last effective button press (used for 1‑second debounce)
+ros::Time last_valid_press = ros::Time(0);
+
+// sequence of commands triggered by successive button presses
+enum BUTTON_STEP {STEP_TAKEOFF = 0, STEP_MOVE = 1, STEP_BACK = 2, STEP_LAND = 3};
+BUTTON_STEP rc_step = STEP_TAKEOFF;
 
 ros::Publisher point_pub;
 ros::Publisher yaw_pub;
@@ -19,17 +35,15 @@ ros::Subscriber odom_sub;
 ros::Subscriber startcommand_sub;
 ros::Subscriber backcommand_sub;
 ros::Subscriber rc_sub;
+ros::Subscriber px4_mode_sub;
 ros::Timer timer;
 
 enum RC_EIGHT_STATE
 {
-    RC_EIGHT_UP = 999,
+    RC_EIGHT_UP = 990,
     RC_EIGHT_MIDDLE = 1499,
-    RC_EIGHT_DOWN = 1999
+    RC_EIGHT_DOWN = 1990
 };
-
-RC_EIGHT_STATE rc_eight_pre = RC_EIGHT_DOWN;
-bool rc_init = true;
 
 // 定义结构体表示每个点的数据
 struct pytStr {
@@ -61,6 +75,8 @@ int fligt_type;
 bool trigger = false;
 int flag_start_plan;
 int flag_back_plan;
+int auto_landing;
+int auto_planning;
 
 void readpyt(string file_path)
 {
@@ -173,6 +189,25 @@ void readpyt(string file_path)
     return;
 }
 
+void px4_mode_cb(const quadrotor_msgs::Px4ctrlState::ConstPtr &msg)
+{
+    // 自动规划
+    if (px4_historical_status == quadrotor_msgs::Px4ctrlState::AUTO_TAKEOFF && 
+        msg->state == quadrotor_msgs::Px4ctrlState::AUTO_HOVER && 
+        auto_planning == 1)
+    {
+        geometry_msgs::PoseStamped startcommand_msg;
+        startcommand_msg.header.stamp = ros::Time::now();
+        startcommand_pub.publish(startcommand_msg);
+        cout << "middle --> up" << endl;
+    }
+
+    px4_historical_status = msg->state;
+
+    // 检查 px4ctrl 是否处于 AUTO_HOVER 状态
+    px4_is_auto_hover = (msg->state == quadrotor_msgs::Px4ctrlState::AUTO_HOVER);
+}
+
 void odom_goal_cb(const nav_msgs::OdometryConstPtr &msg)
 {
     odom_pos_(0) = msg->pose.pose.position.x;
@@ -185,7 +220,7 @@ void odom_goal_cb(const nav_msgs::OdometryConstPtr &msg)
 }
 
 void Point_send(const ros::TimerEvent& event) 
-{
+{   
     if(!trigger){
         return;
     }
@@ -264,6 +299,17 @@ void Point_send(const ros::TimerEvent& event)
         }
     }
 
+    //到达最后一个点并自动降落
+    if (counts_pre == pytVector.size() - 1 && distance_ < next_distance && auto_landing==1 && px4_is_auto_hover)
+    {
+        ROS_INFO("Reached the final waypoint!");
+        trigger = false;  // 停止规划
+        
+        quadrotor_msgs::TakeoffLand takeoff_msg;
+        takeoff_msg.takeoff_land_cmd = 2;
+        takeoff_land_pub.publish(takeoff_msg);
+        cout << "middle --> down" << endl;
+    }
 }
 
 void startplan_cb(const geometry_msgs::PoseStamped::ConstPtr &msg)
@@ -298,59 +344,82 @@ void backplan_cb(const geometry_msgs::PoseStamped::ConstPtr &msg)
 
 void rc_cb(mavros_msgs::RCInConstPtr pMsg)
 {
-    uint16_t rc_eight_cur = pMsg->channels[7]; // 获取遥控器八通道的值
+    // now channel 8 behaves like a momentary button: DOWN when pressed, UP otherwise
+    bool pressed = (pMsg->channels[7] >= RC_EIGHT_DOWN);
+    // ROS_INFO("now channel 8 behaves like a momentary button: DOWN when pressed, UP otherwise");
 
-    if (rc_eight_cur != RC_EIGHT_DOWN && rc_init){
-        // 如果不是 RC_EIGHT_DOWN，则返回，不执行后续逻辑
-        return;
-    }
-    else{
-        rc_init = false;
-    }
-
-    // RC_EIGHT_DOWN 转化成 RC_EIGHT_MIDDLE 状态时发布 takeoff 话题
-    if (rc_eight_cur == RC_EIGHT_MIDDLE && rc_eight_pre == RC_EIGHT_DOWN)
+    // ignore repeated readings; only act on rising edge (false->true)
+    if (pressed && !rc_button_prev)
     {
-        quadrotor_msgs::TakeoffLand takeoff_msg;
-        takeoff_msg.takeoff_land_cmd = 1;
-        takeoff_land_pub.publish(takeoff_msg);
-        cout << "down --> middle" << endl;
-        rc_eight_pre = RC_EIGHT_MIDDLE; 
-        return;
+        // debounce: require minimum interval between valid presses
+        ros::Time now = ros::Time::now();
+        if ((now - last_valid_press).toSec() < 1.0)
+        {
+            
+            ROS_INFO("rc button ignored due to debounce");
+        }
+        else
+        {
+            switch (rc_step)
+            {
+                case STEP_TAKEOFF:
+                    // only issue takeoff if not already hovering in auto
+                    if (!px4_is_auto_hover)
+                    {
+                        quadrotor_msgs::TakeoffLand takeoff_msg;
+                        takeoff_msg.takeoff_land_cmd = 1;
+                        takeoff_land_pub.publish(takeoff_msg);
+                        ROS_INFO("down -> takeoff");
+                        rc_step = STEP_MOVE;
+                    }
+                    break;
+
+                case STEP_MOVE:
+                    // move only when vehicle is in hover (after takeoff)
+                    if (px4_is_auto_hover && auto_planning == 0)
+                    {
+                        geometry_msgs::PoseStamped startcommand_msg;
+                        startcommand_msg.header.stamp = ros::Time::now();
+                        startcommand_pub.publish(startcommand_msg);
+                        ROS_INFO("takeoff -> move");
+                        rc_step = STEP_BACK; // next press will trigger back
+                    }
+                    break;
+
+                case STEP_BACK:
+                    // back command can be sent during the movement phase and when in automatic hover mode
+                    if ((px4_historical_status == quadrotor_msgs::Px4ctrlState::CMD_CTRL && auto_planning == 0) || 
+                        (px4_is_auto_hover && auto_planning == 0))
+                    {
+                        geometry_msgs::PoseStamped backtrigger_msg;
+                        backtrigger_msg.header.stamp = ros::Time::now();
+                        backcommand_pub.publish(backtrigger_msg);
+                        ROS_INFO("move -> back");
+                        rc_step = STEP_LAND;
+                    }
+                    break;
+
+                case STEP_LAND:
+                    // land only when hovering and landing is allowed
+                    if (px4_is_auto_hover && auto_landing == 0)
+                    {
+                        quadrotor_msgs::TakeoffLand takeoff_msg;
+                        takeoff_msg.takeoff_land_cmd = 2;
+                        takeoff_land_pub.publish(takeoff_msg);
+                        ROS_INFO("back -> land");
+                        rc_step = STEP_TAKEOFF; // reset sequence
+                    }
+                    break;
+                    
+                default:
+                    break;
+            }
+        }
+
+        last_valid_press = now;
     }
 
-    // RC_EIGHT_MIDDLE 转化成 RC_EIGHT_UP 状态时发布 move 话题
-    if (rc_eight_cur == RC_EIGHT_UP && rc_eight_pre == RC_EIGHT_MIDDLE)
-    {
-        geometry_msgs::PoseStamped startcommand_msg;
-        startcommand_msg.header.stamp = ros::Time::now();
-        startcommand_pub.publish(startcommand_msg);
-        cout << "middle --> up" << endl;
-        rc_eight_pre = RC_EIGHT_UP; 
-        return;
-    }
-
-    // RC_EIGHT_UP 转化成 RC_EIGHT_MIDDLE 状态时发布 back 话题
-    if (rc_eight_cur == RC_EIGHT_MIDDLE && rc_eight_pre == RC_EIGHT_UP)
-    {
-        geometry_msgs::PoseStamped backtrigger_msg;
-        backtrigger_msg.header.stamp = ros::Time::now();
-        backcommand_pub.publish(backtrigger_msg);
-        cout << "up --> middle" << endl;
-        rc_eight_pre = RC_EIGHT_MIDDLE; 
-        return;
-    }
-
-    // RC_EIGHT_MIDDLE 转化成 RC_EIGHT_DOWN 状态时发布 land 话题
-    if (rc_eight_cur == RC_EIGHT_DOWN && rc_eight_pre == RC_EIGHT_MIDDLE)
-    {
-        quadrotor_msgs::TakeoffLand takeoff_msg;
-        takeoff_msg.takeoff_land_cmd = 2;
-        takeoff_land_pub.publish(takeoff_msg);
-        cout << "middle --> down" << endl;
-        rc_eight_pre = RC_EIGHT_DOWN; 
-        return;
-    }
+    rc_button_prev = pressed;
 }
     
 int main(int argc, char** argv)
@@ -363,7 +432,9 @@ int main(int argc, char** argv)
         !nh.getParam("/multipointplan/next_distance", next_distance) || 
         !nh.getParam("/multipointplan/start_plan", flag_start_plan) ||
         !nh.getParam("/multipointplan/back_plan", flag_back_plan) ||
-        !nh.getParam("/multipointplan/fligt_type", fligt_type)) 
+        !nh.getParam("/multipointplan/fligt_type", fligt_type) ||
+        !nh.getParam("/multipointplan/auto_planning", auto_planning) ||
+        !nh.getParam("/multipointplan/auto_landing", auto_landing))
     {
         ROS_ERROR("Failed to get parameter ,please check it");
         return 1;
@@ -389,6 +460,7 @@ int main(int argc, char** argv)
     if(flag_back_plan){
         backcommand_sub = nh.subscribe("/back_trigger", 10, backplan_cb);
     }
+    px4_mode_sub = nh.subscribe("/px4ctrl/state", 10, px4_mode_cb);
     rc_sub = nh.subscribe("/mavros/rc/in", 10, rc_cb);
     takeoff_land_pub = nh.advertise<quadrotor_msgs::TakeoffLand>("/px4ctrl/takeoff_land", 10);
     startcommand_pub = nh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 10);
@@ -399,4 +471,3 @@ int main(int argc, char** argv)
     
     ros::spin();
 }
-   

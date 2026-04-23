@@ -171,23 +171,23 @@ rosbag record --tcpnodelay /back_trigger \
 /odom_visualization/cmd \
 /odom_visualization/covariance \
 /odom_visualization/covariance_velocity \
-/odom_visualization/height\
-/odom_visualization/path\
-/odom_visualization/pose\
-/odom_visualization/robot\
-/odom_visualization/robot_array\
-/odom_visualization/sensor\
-/odom_visualization/trajectory\
-/odom_visualization/velocity\
-/planning/trajectory\
-/planning/yaw\
+/odom_visualization/height \
+/odom_visualization/path \
+/odom_visualization/pose \
+/odom_visualization/robot \
+/odom_visualization/robot_array \
+/odom_visualization/sensor \
+/odom_visualization/trajectory \
+/odom_visualization/velocity \
+/planning/trajectory \
+/planning/yaw \
 /px4ctrl/takeoff_land \
 /rosout \
-/rosout_agg\
-/setpoints_cmd\
+/rosout_agg \
+/setpoints_cmd \
 /tf \
-/tf_static\
-/traj_start_trigger\
+/tf_static \
+/traj_start_trigger \
 /try \
 /usb_cam/image_raw/mouse_click \
 /vins_estimator/extrinsic \

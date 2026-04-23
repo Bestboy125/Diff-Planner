@@ -29,6 +29,9 @@ Eigen::Vector3d last_pos_;
 double last_yaw_, last_yawdot_, slowly_flip_yaw_target_, slowly_turn_to_center_target_;
 double time_forward_;
 double yaw_custom_;
+double YAW_DOT_MAX_PER_SEC = 2 * M_PI;
+double YAW_DOT_DOT_MAX_PER_SEC = 5 * M_PI;
+
 bool receive_yaw_ = false;
 ros::Time receive_yaw_time_(0);
 
@@ -85,8 +88,6 @@ void polyTrajCallback(traj_utils::PolyTrajPtr msg)
 
 std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, double dt)
 {
-  constexpr double YAW_DOT_MAX_PER_SEC = 2 * M_PI;
-  constexpr double YAW_DOT_DOT_MAX_PER_SEC = 5 * M_PI;
   std::pair<double, double> yaw_yawdot(0, 0);
 
   Eigen::Vector3d dir = t_cur + time_forward_ <= traj_duration_
@@ -345,6 +346,8 @@ int main(int argc, char **argv)
   ros::Timer cmd_timer = nh.createTimer(ros::Duration(0.01), cmdCallback);
 
   nh.param("traj_server/time_forward", time_forward_, -1.0);
+  nh.param("traj_server/yaw_dot_max", YAW_DOT_MAX_PER_SEC, YAW_DOT_MAX_PER_SEC);
+  nh.param("traj_server/yaw_dot_dot_max", YAW_DOT_DOT_MAX_PER_SEC, YAW_DOT_DOT_MAX_PER_SEC);
   last_yaw_ = 0.0;
   last_yawdot_ = 0.0;
 
