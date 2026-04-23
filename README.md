@@ -80,7 +80,9 @@ roslaunch diff_planner run_sim_swarm.launch
 cd Diff-Planner #新建终端
 ./sh_files/pub_swarm_trigger.sh #开始执行任务
 ```
-
+<p align="center">
+  <img src="images/swarm.gif" alt="rviz_tes" width="600" />
+</p>
 
 ## 实机运行步骤
 

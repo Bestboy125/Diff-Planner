@@ -118,7 +118,7 @@
         <param name="grid_map/cloud_enable_raycast" value="true"/>
         <!-- when use lidar fading_time = -1.0  -->
         <!-- when use vio fading_time = 1000  -->
-        <param name="grid_map/fading_time" value="1.0"/>
+        <param name="grid_map/fading_time" value="-1.0"/>
         <param name="grid_map/min_ray_length" value="0.1"/>
         <param name="grid_map/max_ray_length" value="4.5"/>
         <param name="grid_map/visualization_truncate_height" value="1.9"/>
