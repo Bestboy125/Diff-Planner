@@ -17,11 +17,11 @@
 
 >+ **修复**在状态机中使用 **planNextWaypoint()** 导致状态机卡死的bug。
 
->+ **新增**规划优化异常检测， 避免动力学不可行的轨迹发出，新增了动力学容忍值（[advanced_param.xml](src/diff_planner/plan_manage/launch/include/advanced_param.xml)中设置）：\
+>+ **新增**规划优化异常检测， 避免动力学不可行的轨迹发出，新增了动力学容忍值（[advanced_param_exp.xml](src/diff_planner/plan_manage/launch/include/advanced_param_exp.xml)中设置）：\
 \<param name="optimization/vel_tolerance" value="1.0" type="double"/>  \
 \<param name="optimization/acc_tolerance" value="1.0" type="double"/>
 
->+ **修复**遇到大障碍物后，无人机在大障碍物面前反复徘徊卡死的bug，同时增加是否使用大障碍物检测的开关（[advanced_param.xml](src/diff_planner/plan_manage/launch/include/advanced_param.xml)中设置）：\
+>+ **修复**遇到大障碍物后，无人机在大障碍物面前反复徘徊卡死的bug，同时增加是否使用大障碍物检测的开关（[advanced_param_exp.xml](src/diff_planner/plan_manage/launch/include/advanced_param_exp.xml)中设置）：\
 >\<param name="fsm/enable_stuck_detect" value="true"/> 
 
 >+ **新增**优化失败次数过多的处理。
@@ -116,8 +116,7 @@ cd Diff-Planner #新建终端
 
 2. 在 [points.yaml](src/user_command/multipoint/config/points.yaml) 中设置 `test1` 对应的途径点坐标，以及返程规划的途径点坐标。
 
-3. 检查 [ctrl_param_fpv.yaml](src/realflight_modules/px4ctrl/config/ctrl_param_fpv.yaml) 中起飞高度 `takeoff
-_height` 设置是否合适。
+3. 检查 [ctrl_param_fpv.yaml](src/realflight_modules/px4ctrl/config/ctrl_param_fpv.yaml) 中起飞高度 `takeoff_height` 设置是否合适。
 
 4. 打开遥控器，确认拨杆位置是否正确。
 
