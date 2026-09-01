@@ -3,7 +3,6 @@
     <arg name="local_map_size_y"/>
     <arg name="local_map_size_z"/>
     <arg name="odom_topic"/>
-    <arg name="goal_topic" default="/goal"/>
     <arg name="camera_pose_topic"/>
     <arg name="depth_topic"/>
     <arg name="cloud_topic"/>
@@ -46,7 +45,6 @@
     <node pkg="diff_planner" name="drone_$(arg drone_id)_diff_planner_node" type="diff_planner_node" output="screen">
         <remap from="~odom_world" to="$(arg odom_topic)"/>
         <remap from="~mandatory_stop" to="/mandatory_stop_to_planner"/>
-        <remap from="~hover_stop" to="/vla_hover_stop_to_planner"/>
         <remap from="~planning/trajectory" to = "/drone_$(arg drone_id)_planning/trajectory"/>
         <remap from="~planning/data_display" to = "/drone_$(arg drone_id)_planning/data_display"/>
         <remap from="~planning/broadcast_traj_send" to = "/broadcast_traj_from_planner"/>
@@ -68,7 +66,6 @@
         <param name="fsm/mondify_final_goal" value="true"/>
         <!-- Enable stuck detection mechanism to handle deadlock situations -->
         <param name="fsm/enable_stuck_detect" value="true"/>
-        <param name="fsm/goal_topic" value="$(arg goal_topic)"/>
         <param name="fsm/waypoint_num" value="$(arg point_num)" type="int"/>
         <param name="fsm/waypoint0_x" value="$(arg point0_x)" type="double"/>
         <param name="fsm/waypoint0_y" value="$(arg point0_y)" type="double"/>

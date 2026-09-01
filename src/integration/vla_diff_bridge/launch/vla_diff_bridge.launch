@@ -1,10 +1,14 @@
 <launch>
   <arg name="auth_token" default="REQUIRED"/>
   <arg name="live_publish_enabled" default="false"/>
+  <arg name="preview_only_mode" default="true"/>
   <arg name="planning_preview_enabled" default="false"/>
   <arg name="expected_calibration_id" default="REQUIRED"/>
   <arg name="allowed_host_ip" default="192.168.14.250"/>
   <arg name="odom_topic" default="/ekf/ekf_odom"/>
+  <arg name="world_frame" default="world"/>
+  <arg name="body_frame" default="base_link"/>
+  <arg name="camera_frame" default="camera_color_optical_frame"/>
   <arg name="goal_topic" default="/goal"/>
   <arg name="yaw_topic" default="/planning/yaw"/>
   <arg name="hover_stop_topic" default="/vla_hover_stop_to_planner"/>
@@ -16,8 +20,12 @@
     <rosparam command="load" file="$(find vla_diff_bridge)/config/vla_bridge.yaml"/>
     <param name="auth_token" value="$(arg auth_token)"/>
     <param name="live_publish_enabled" value="$(arg live_publish_enabled)"/>
+    <param name="preview_only_mode" value="$(arg preview_only_mode)"/>
     <param name="planning_preview_enabled" value="$(arg planning_preview_enabled)"/>
     <param name="expected_calibration_id" value="$(arg expected_calibration_id)"/>
+    <param name="world_frame" value="$(arg world_frame)"/>
+    <param name="body_frame" value="$(arg body_frame)"/>
+    <param name="camera_frame" value="$(arg camera_frame)"/>
     <rosparam param="allowed_host_ips" subst_value="true">["$(arg allowed_host_ip)"]</rosparam>
     <remap from="~odom" to="$(arg odom_topic)"/>
     <remap from="~goal" to="$(arg goal_topic)"/>

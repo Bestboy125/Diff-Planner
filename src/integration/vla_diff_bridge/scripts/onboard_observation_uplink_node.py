@@ -79,32 +79,18 @@ class ObservationUplink:
         if not jpeg.startswith(b"\xff\xd8"):
             self._publish_status("drop", "compressed camera payload is not JPEG")
             return
-        self._enqueue(message.header.stamp, message.header.frame_id, jpeg)
+        self._enqueue(("jpeg", message.header.stamp, message.header.frame_id, jpeg))
 
     def _raw_callback(self, message: Image) -> None:
-        try:
-            import cv2
-            from cv_bridge import CvBridge
+        self._enqueue(("raw", message.header.stamp, message.header.frame_id, message))
 
-            rgb = CvBridge().imgmsg_to_cv2(message, desired_encoding="bgr8")
-            ok, encoded = cv2.imencode(
-                ".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
-            )
-            if not ok:
-                raise RuntimeError("cv2.imencode returned false")
-            self._enqueue(message.header.stamp, message.header.frame_id, encoded.tobytes())
-        except Exception as exc:
-            self._publish_status("drop", "raw image conversion failed: {}".format(exc))
-
-    def _enqueue(self, stamp: rospy.Time, frame_id: str, jpeg: bytes) -> None:
-        try:
-            payload = self._build_payload(stamp, frame_id or self.camera_frame, jpeg)
-        except Exception as exc:
-            self._publish_status("drop", str(exc))
-            return
+    def _enqueue(self, frame: Any) -> None:
+        """Camera callbacks only enqueue; TF, encoding and HTTP stay off callback threads."""
+        with self._lock:
+            item = (frame, self._latest_odom, self._camera_info, self._planner_preview)
         while True:
             try:
-                self._queue.put_nowait(payload)
+                self._queue.put_nowait(item)
                 return
             except queue.Full:
                 try:
@@ -113,11 +99,16 @@ class ObservationUplink:
                 except queue.Empty:
                     return
 
-    def _build_payload(self, stamp: rospy.Time, image_frame: str, jpeg: bytes) -> Dict[str, Any]:
+    def _build_payload(
+        self,
+        stamp: rospy.Time,
+        image_frame: str,
+        jpeg: bytes,
+        odom: Optional[Odometry],
+        camera: Optional[CameraInfo],
+        planner_preview: Optional[PositionCommand],
+    ) -> Dict[str, Any]:
         with self._lock:
-            odom = self._latest_odom
-            camera = self._camera_info
-            planner_preview = self._planner_preview
             sequence = self._sequence
             self._sequence += 1
         if odom is None:
@@ -193,10 +184,24 @@ class ObservationUplink:
         endpoint = self.backend_url + "/api/onboard/observations"
         while not self._shutdown.is_set() and not rospy.is_shutdown():
             try:
-                payload = self._queue.get(timeout=0.2)
+                frame, odom, camera, planner_preview = self._queue.get(timeout=0.2)
+                image_kind, stamp, frame_id, image_data = frame
             except queue.Empty:
                 continue
             try:
+                jpeg = (
+                    image_data
+                    if image_kind == "jpeg"
+                    else self._encode_raw_image(image_data)
+                )
+                payload = self._build_payload(
+                    stamp,
+                    frame_id or self.camera_frame,
+                    jpeg,
+                    odom,
+                    camera,
+                    planner_preview,
+                )
                 body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
                 request = Request(
                     endpoint,
@@ -212,8 +217,22 @@ class ObservationUplink:
                 self._publish_status("online", "uploaded observation {}".format(payload["sequence"]))
             except (HTTPError, URLError, TimeoutError) as exc:
                 self._publish_status("degraded", "upload failed: {}".format(exc))
+            except Exception as exc:
+                self._publish_status("drop", "observation assembly failed: {}".format(exc))
             finally:
                 self._queue.task_done()
+
+    def _encode_raw_image(self, message: Image) -> bytes:
+        import cv2
+        from cv_bridge import CvBridge
+
+        bgr = CvBridge().imgmsg_to_cv2(message, desired_encoding="bgr8")
+        ok, encoded = cv2.imencode(
+            ".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
+        )
+        if not ok:
+            raise RuntimeError("cv2.imencode returned false")
+        return encoded.tobytes()
 
     @staticmethod
     def _stamp_ms(stamp: rospy.Time) -> int:

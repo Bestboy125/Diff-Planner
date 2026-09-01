@@ -4,6 +4,9 @@
   <arg name="calibration_id" default="REQUIRED"/>
   <arg name="calibration_validated" default="false"/>
   <arg name="odom_topic" default="/ekf/ekf_odom"/>
+  <arg name="world_frame" default="world"/>
+  <arg name="body_frame" default="base_link"/>
+  <arg name="camera_frame" default="camera_color_optical_frame"/>
   <arg name="camera_info_topic" default="/camera/color/camera_info"/>
   <arg name="image_compressed_topic" default="/camera/color/image_raw/compressed"/>
   <arg name="planner_preview_topic" default="/vla/optimized_trajectory_preview"/>
@@ -15,6 +18,9 @@
     <param name="observation_token" value="$(arg observation_token)"/>
     <param name="calibration_id" value="$(arg calibration_id)"/>
     <param name="calibration_validated" value="$(arg calibration_validated)"/>
+    <param name="world_frame" value="$(arg world_frame)"/>
+    <param name="body_frame" value="$(arg body_frame)"/>
+    <param name="camera_frame" value="$(arg camera_frame)"/>
     <remap from="~odom" to="$(arg odom_topic)"/>
     <remap from="~camera_info" to="$(arg camera_info_topic)"/>
     <remap from="~image_compressed" to="$(arg image_compressed_topic)"/>

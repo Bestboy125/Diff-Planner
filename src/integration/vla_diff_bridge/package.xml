@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>vla_diff_bridge</name>
-  <version>0.1.0</version>
-  <description>Validated TCP/JSON bridge from the host VLA backend to Diff-Planner ROS topics.</description>
+  <version>0.2.0</version>
+  <description>Drop-in FAST-LIO, camera, host VLA and isolated Diff-Planner preview integration.</description>
   <maintainer email="maintainer@example.com">VLA Planner Maintainer</maintainer>
   <license>GPLv3</license>
 
@@ -16,4 +16,7 @@
   <depend>std_msgs</depend>
   <depend>tf</depend>
   <depend>tf2_ros</depend>
+  <exec_depend>diff_planner</exec_depend>
+  <exec_depend>roslaunch</exec_depend>
+  <test_depend>python3-nose</test_depend>
 </package>

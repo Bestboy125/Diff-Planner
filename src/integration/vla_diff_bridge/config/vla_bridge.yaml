@@ -4,6 +4,7 @@ port: 50051
 allowed_host_ips:
   - 192.168.14.250
 live_publish_enabled: false
+preview_only_mode: true
 planning_preview_enabled: false
 world_frame: world
 body_frame: base_link

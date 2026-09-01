@@ -1,5 +1,7 @@
 # 模块 4：启动 Shell 脚本
 
+> `Diff-Planner/sh_files/run_vla_diff_planner_lio.sh` 是早期整机方案，仅保留给模拟分支回溯。`real-deployment` 使用包内 `scripts/run_vla_fastlio_diff_preview.sh` 和 `launch/vla_fastlio_diff_preview_stack.launch`；它们可随单个 integration 包安装，且不启动飞控栈。详细流程见 `09_REAL_DEPLOYMENT_PACKAGE.md`。
+
 对应文件：`Diff-Planner/sh_files/run_vla_diff_planner_lio.sh`。
 
 脚本使用 bash 和 `set -euo pipefail`，通过绝对解析得到工作空间路径，并在退出时向所有由脚本启动的子进程发送 SIGINT。它没有复制原脚本中的明文 sudo 密码；串口权限应通过 udev 规则预先配置。

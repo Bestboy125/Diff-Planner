@@ -95,7 +95,7 @@ namespace diff_planner
     /* ROS utils */
     ros::NodeHandle node_;
     ros::Timer exec_timer_, safety_timer_;
-    ros::Subscriber waypoint_sub_, odom_sub_, trigger_sub_, broadcast_ploytraj_sub_, mandatory_stop_sub_, hover_stop_sub_;
+    ros::Subscriber waypoint_sub_, odom_sub_, trigger_sub_, broadcast_ploytraj_sub_, mandatory_stop_sub_;
     ros::Publisher poly_traj_pub_, data_disp_pub_, broadcast_ploytraj_pub_, heartbeat_pub_, ground_height_pub_;
 
     /* state machine functions */
@@ -122,7 +122,6 @@ namespace diff_planner
 
     /* input-output */
     void mandatoryStopCallback(const std_msgs::Empty &msg);
-    void hoverStopCallback(const std_msgs::Empty &msg);
     void odometryCallback(const nav_msgs::OdometryConstPtr &msg);
     void triggerCallback(const geometry_msgs::PoseStampedPtr &msg);
     void RecvBroadcastMINCOTrajCallback(const traj_utils::MINCOTrajConstPtr &msg);

@@ -59,6 +59,7 @@ class VlaDiffBridge:
         self.auth_token = str(rospy.get_param("~auth_token", "REQUIRED"))
         self.allowed_host_ips = set(rospy.get_param("~allowed_host_ips", ["192.168.14.250"]))
         self.live_publish_enabled = bool(rospy.get_param("~live_publish_enabled", False))
+        self.preview_only_mode = bool(rospy.get_param("~preview_only_mode", True))
         self.planning_preview_enabled = bool(rospy.get_param("~planning_preview_enabled", False))
         self.world_frame = str(rospy.get_param("~world_frame", "world"))
         self.body_frame = str(rospy.get_param("~body_frame", "base_link"))
@@ -80,6 +81,8 @@ class VlaDiffBridge:
             raise RuntimeError("~auth_token must be supplied by the launch environment")
         if self.live_publish_enabled and not self.allowed_host_ips:
             raise RuntimeError("live mode requires at least one allowed_host_ips entry")
+        if self.preview_only_mode and self.live_publish_enabled:
+            raise RuntimeError("preview_only_mode forbids live_publish_enabled")
         if self.planning_preview_enabled and self.expected_calibration_id == "REQUIRED":
             raise RuntimeError("~expected_calibration_id is required for planning preview")
 
@@ -155,6 +158,8 @@ class VlaDiffBridge:
 
             if command.frame_id != self.world_frame:
                 raise ProtocolError("frame_id does not match onboard world frame")
+            if self.preview_only_mode and command.command != PLAN_PREVIEW:
+                raise ProtocolError("legacy control protocol is disabled in preview_only_mode")
             self._validate_goal(command)
             self._last_sequence[command.mission_id] = command.sequence
             self._active_mission_id = command.mission_id
@@ -201,7 +206,7 @@ class VlaDiffBridge:
             return "accepted", "mandatory stop published"
 
     def _validate_goal(self, command: BridgeCommand) -> None:
-        if command.command != TRACK:
+        if command.command not in {TRACK, PLAN_PREVIEW}:
             return
         assert command.target_mission is not None
         target_x, target_y, target_z, _ = command.target_mission
@@ -280,6 +285,7 @@ class VlaDiffBridge:
             "status": status,
             "detail": detail,
             "live_publish_enabled": self.live_publish_enabled,
+            "preview_only_mode": self.preview_only_mode,
             "planning_preview_enabled": self.planning_preview_enabled,
             "mission_id": command.mission_id if command else self._active_mission_id,
             "sequence": command.sequence if command else None,

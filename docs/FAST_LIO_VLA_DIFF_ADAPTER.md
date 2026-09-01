@@ -83,10 +83,10 @@ $env:CONTROL_OUTPUT_ENABLED="false"
 - `onboard_observation_uplink_node.py`：只读订阅与非阻塞 HTTP 上行；代码中没有控制 Publisher。
 - `vla_diff_bridge_node.py`：区分旧控制协议和新预览协议；预览只发布到独立话题。
 - `protocol.py`：schema v2 强制携带观测序号、时间、world/body/camera frame 和 calibration ID。
-- `diff_replan_fsm.cpp`：目标话题参数化，默认仍为 `/goal`，预览模式为 `/vla/preview_goal`。
-- `traj_server.cpp`：yaw 与轨迹输出参数化；预览模式输出到 `/vla/optimized_trajectory_preview`。
-- `run_exp_single_lio_vla_preview.launch`：只启动规划预览，不连接控制器。
-- `run_vla_fastlio_diff_preview.sh`：只组装以上三部分，不含 MAVROS、px4ctrl、arming 或 takeoff。
+- Diff-Planner 核心源码保持不变；集成包 launch 对原始绝对话题做作用域内 remap。
+- `vla_fastlio_diff_preview_stack.launch`：在 integration 包内组装规划器、网络桥和观测上行，三个运行组默认关闭。
+- `scripts/run_vla_fastlio_diff_preview.sh`：包内启动包装器，只组装上述预览链路，不包含飞控和运动步骤。
+- `docs/09_REAL_DEPLOYMENT_PACKAGE.md`：增量复制、未来单包编译和充满电后的分阶段核查流程。
 
 ## 运行前静态检查
 

@@ -4,13 +4,11 @@
 
 数据链路如下：
 
-`OpenVLA / π0.5 -> ground_station 后端 -> TCP/NDJSON:50051 -> vla_diff_bridge -> /goal + /planning/yaw -> Diff-Planner -> /setpoints_cmd`
+`OpenVLA / π0.5 -> ground_station 后端 -> TCP/NDJSON:50051 -> vla_diff_bridge -> /vla/preview_goal + /vla/preview_yaw -> Diff-Planner -> /vla/optimized_trajectory_preview`
 
 安全状态链路如下：
 
-`HOLD / COMPLETE / 命令流超时 -> 可恢复 hover-stop -> Diff-Planner 动力学减速停止`
-
-`EMERGENCY_STOP -> /mandatory_stop_to_planner`
+真实部署分支启用 `preview_only_mode=true`，拒绝 schema v1 的 TRACK/HOLD/COMPLETE/EMERGENCY_STOP 控制协议，只接受 schema v2 `PLAN_PREVIEW`。
 
 默认参数 `live_publish_enabled: false`。在这个状态下网络命令会完成格式、时间和安全检查，但不会发布 `/goal`、`/planning/yaw` 或强制停止消息。
 
@@ -19,15 +17,16 @@
 1. [协议校验模块](../src/integration/vla_diff_bridge/docs/01_PROTOCOL.md)：主机与机载端的字段、单位、TTL、顺序号和 ACK。
 2. [ROS 桥接节点](../src/integration/vla_diff_bridge/docs/02_ROS_BRIDGE_NODE.md)：话题映射、目标检查、悬停和 watchdog。
 3. [ROS 启动与配置](../src/integration/vla_diff_bridge/docs/03_LAUNCH_AND_CONFIG.md)：launch 参数、YAML 安全边界及现场待填写项。
-4. [Shell 启动脚本](../src/integration/vla_diff_bridge/docs/04_START_SCRIPT.md)：仅桥接模式与完整 LIO 模式。
+4. [Shell 启动脚本](../src/integration/vla_diff_bridge/docs/04_START_SCRIPT.md)：包内规划预览入口。
 5. [主机后端发送端](../src/integration/vla_diff_bridge/docs/05_HOST_BACKEND.md)：如何把两个模型的共同输出封装并发送。
 6. [验证说明](../src/integration/vla_diff_bridge/docs/06_VERIFICATION.md)：Windows 可执行验证、Ubuntu/ROS 待执行验证及实机前门槛。
 7. [Diff-Planner FSM 改动](../src/integration/vla_diff_bridge/docs/07_DIFF_PLANNER_FSM.md)：可恢复悬停入口和原 mandatory-stop 标志修复。
 8. [Headless 仿真](../src/integration/vla_diff_bridge/docs/08_HEADLESS_SIMULATION.md)：不启动实机模块的笔记本闭环仿真入口。
+9. [真机增量包](../src/integration/vla_diff_bridge/docs/09_REAL_DEPLOYMENT_PACKAGE.md)：单包复制、未来增量编译与实机只读核查顺序。
 
-## 对 Diff-Planner 核心的最小改动
+## Diff-Planner 核心保持不变
 
-`diff_replan_fsm.cpp` 已订阅 `/goal`，并在收到目标后调用 `planNextWaypoint()`；`traj_server.cpp` 已订阅 `/planning/yaw`，并对自定义 yaw 做角速度和角加速度限制。因此 TRACK 复用现有入口。FSM 只新增一个 `hover_stop` 回调，并修复 mandatory-stop 没有重新置位制动标志的问题；地图、搜索、优化器和 PX4 控制器未改动。
+真实部署不修改 `diff_replan_fsm.cpp`、`traj_server.cpp`、地图、搜索或优化器。integration launch 在节点作用域中把原始 `/goal`、`/planning/yaw`、`/position_cmd` 绝对名称重映射到 `/vla/*` 预览命名空间。早期 FSM hover-stop 改动仅保留在 `simulation-validated` 分支。
 
 ## 现场仍需确认
 

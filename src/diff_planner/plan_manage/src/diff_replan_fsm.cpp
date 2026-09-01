@@ -23,8 +23,6 @@ namespace diff_planner
     nh.param("fsm/ground_height_measurement", enable_ground_height_measurement_, false);
     nh.param("fsm/mondify_final_goal", mondify_final_goal_, true);
     nh.param("fsm/enable_stuck_detect", enable_stuck_detect_, true);
-    std::string goal_topic;
-    nh.param<std::string>("fsm/goal_topic", goal_topic, "/goal");
 
     nh.param("fsm/waypoint_num", waypoint_num_, -1);
     for (int i = 0; i < waypoint_num_; i++)
@@ -56,7 +54,6 @@ namespace diff_planner
 
     odom_sub_ = nh.subscribe("odom_world", 1, &DiffReplanFSM::odometryCallback, this);
     mandatory_stop_sub_ = nh.subscribe("mandatory_stop", 1, &DiffReplanFSM::mandatoryStopCallback, this);
-    hover_stop_sub_ = nh.subscribe("hover_stop", 1, &DiffReplanFSM::hoverStopCallback, this);
 
     /* Use MINCO trajectory to minimize the message size in wireless communication */
     broadcast_ploytraj_pub_ = nh.advertise<traj_utils::MINCOTraj>("planning/broadcast_traj_send", 10);
@@ -72,7 +69,7 @@ namespace diff_planner
 
     if (target_type_ == TARGET_TYPE::MANUAL_TARGET)
     {
-      waypoint_sub_ = nh.subscribe(goal_topic, 1, &DiffReplanFSM::waypointCallback, this);
+      waypoint_sub_ = nh.subscribe("/goal", 1, &DiffReplanFSM::waypointCallback, this);
     }
     else if (target_type_ == TARGET_TYPE::PRESET_TARGET)
     {
@@ -774,19 +771,9 @@ namespace diff_planner
   void DiffReplanFSM::mandatoryStopCallback(const std_msgs::Empty &msg)
   {
     mandatory_stop_ = true;
-    need_hover_stop_ = true;
-    flag_escape_emergency_ = true;
     ROS_ERROR("Received a mandatory stop command!");
     changeFSMExecState(EMERGENCY_STOP, "Mandatory Stop");
     enable_fail_safe_ = false;
-  }
-
-  void DiffReplanFSM::hoverStopCallback(const std_msgs::Empty &msg)
-  {
-    need_hover_stop_ = true;
-    flag_escape_emergency_ = true;
-    ROS_WARN("Received an external hover-stop command.");
-    changeFSMExecState(EMERGENCY_STOP, "External Hover Stop");
   }
 
   void DiffReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg)
