@@ -20,12 +20,15 @@ import tf2_ros
 
 class ObservationUplink:
     def __init__(self) -> None:
-        self.backend_url = str(rospy.get_param("~backend_url", "http://192.168.14.250:8080")).rstrip("/")
+        self.backend_url = str(rospy.get_param("~backend_url", "http://192.168.5.2:8080")).rstrip("/")
         self.token = str(rospy.get_param("~observation_token", "REQUIRED"))
         self.vehicle_id = str(rospy.get_param("~vehicle_id", "uav0"))
         self.world_frame = str(rospy.get_param("~world_frame", "world"))
         self.body_frame = str(rospy.get_param("~body_frame", "base_link"))
         self.camera_frame = str(rospy.get_param("~camera_frame", "camera_color_optical_frame"))
+        self.allow_empty_odom_child_frame = bool(
+            rospy.get_param("~allow_empty_odom_child_frame", False)
+        )
         self.calibration_id = str(rospy.get_param("~calibration_id", "REQUIRED"))
         self.calibration_validated = bool(rospy.get_param("~calibration_validated", False))
         self.image_transport = str(rospy.get_param("~image_transport", "compressed"))
@@ -119,8 +122,13 @@ class ObservationUplink:
         odom_ms = self._stamp_ms(odom.header.stamp)
         if abs(capture_ms - odom_ms) > self.max_pair_age_ms:
             raise RuntimeError("latest FAST-LIO odometry is not synchronized with image")
-        if odom.header.frame_id != self.world_frame or odom.child_frame_id != self.body_frame:
-            raise RuntimeError("FAST-LIO odometry frame contract mismatch")
+        if odom.header.frame_id != self.world_frame:
+            raise RuntimeError("FAST-LIO odometry world frame contract mismatch")
+        source_child_frame = odom.child_frame_id.strip()
+        if source_child_frame and source_child_frame != self.body_frame:
+            raise RuntimeError("FAST-LIO odometry child frame contract mismatch")
+        if not source_child_frame and not self.allow_empty_odom_child_frame:
+            raise RuntimeError("FAST-LIO odometry child frame is empty")
         if image_frame != self.camera_frame or camera.header.frame_id != self.camera_frame:
             raise RuntimeError("camera optical frame contract mismatch")
         try:
@@ -145,7 +153,9 @@ class ObservationUplink:
             "odometry": {
                 "stamp_unix_ms": odom_ms,
                 "frame_id": odom.header.frame_id,
-                "child_frame_id": odom.child_frame_id,
+                # ekf_lidar currently publishes an empty child_frame_id. The
+                # normalized contract remains explicit and calibration-gated.
+                "child_frame_id": self.body_frame,
                 "pose": {
                     "position": self._xyz(pose.position),
                     "orientation": self._xyzw(pose.orientation),

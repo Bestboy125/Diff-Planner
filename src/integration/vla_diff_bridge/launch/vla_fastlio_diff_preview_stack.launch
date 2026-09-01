@@ -9,12 +9,14 @@
   <arg name="cloud_topic" default="/laserMapping/cloud_registered"/>
   <arg name="camera_info_topic" default="/camera/color/camera_info"/>
   <arg name="image_compressed_topic" default="/camera/color/image_raw/compressed"/>
+  <arg name="image_raw_topic" default="/camera/color/image_raw"/>
+  <arg name="image_transport" default="compressed"/>
   <arg name="world_frame" default="world"/>
   <arg name="body_frame" default="base_link"/>
   <arg name="camera_frame" default="camera_color_optical_frame"/>
 
-  <arg name="backend_url" default="http://192.168.14.250:8080"/>
-  <arg name="allowed_host_ip" default="192.168.14.250"/>
+  <arg name="backend_url" default="http://192.168.5.2:8080"/>
+  <arg name="allowed_host_ip" default="192.168.5.2"/>
   <arg name="bridge_token" default="REQUIRED"/>
   <arg name="observation_token" default="REQUIRED"/>
   <arg name="calibration_id" default="REQUIRED"/>
@@ -49,9 +51,6 @@
       <arg name="virtual_ground" value="0.1"/>
       <arg name="map_resolution" value="0.2"/>
       <arg name="inflation_size" value="0.4"/>
-      <arg name="init_x" value="0.0"/>
-      <arg name="init_y" value="0.0"/>
-      <arg name="init_z" value="0.0"/>
       <arg name="flight_type" value="1"/>
       <arg name="point_num" value="1"/>
       <arg name="point0_x" value="0.0"/>
@@ -116,6 +115,8 @@
       <arg name="camera_frame" value="$(arg camera_frame)"/>
       <arg name="camera_info_topic" value="$(arg camera_info_topic)"/>
       <arg name="image_compressed_topic" value="$(arg image_compressed_topic)"/>
+      <arg name="image_raw_topic" value="$(arg image_raw_topic)"/>
+      <arg name="image_transport" value="$(arg image_transport)"/>
       <arg name="planner_preview_topic" value="$(arg optimized_preview_topic)"/>
     </include>
   </group>

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>vla_diff_bridge</name>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <description>Drop-in FAST-LIO, camera, host VLA and isolated Diff-Planner preview integration.</description>
   <maintainer email="maintainer@example.com">VLA Planner Maintainer</maintainer>
   <license>GPLv3</license>

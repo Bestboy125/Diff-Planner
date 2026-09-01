@@ -8,7 +8,7 @@ launch 加载安全参数并完成话题映射。可覆盖参数：
 
 - `auth_token`：必填；默认 `REQUIRED` 会让节点拒绝启动。
 - `live_publish_enabled`：默认 `false`。
-- `allowed_host_ip`：默认 `192.168.14.250`。
+- `allowed_host_ip`：当前机载网段默认 `192.168.5.2`（Windows 主机有线网卡）。
 - `odom_topic`：默认 `/ekf/ekf_odom`。
 - `goal_topic`、`yaw_topic`、`hover_stop_topic` 和 `mandatory_stop_topic`：默认对接当前 Diff-Planner 单机实飞配置。
 

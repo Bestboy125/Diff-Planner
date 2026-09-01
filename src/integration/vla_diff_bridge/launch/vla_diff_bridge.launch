@@ -4,7 +4,7 @@
   <arg name="preview_only_mode" default="true"/>
   <arg name="planning_preview_enabled" default="false"/>
   <arg name="expected_calibration_id" default="REQUIRED"/>
-  <arg name="allowed_host_ip" default="192.168.14.250"/>
+  <arg name="allowed_host_ip" default="192.168.5.2"/>
   <arg name="odom_topic" default="/ekf/ekf_odom"/>
   <arg name="world_frame" default="world"/>
   <arg name="body_frame" default="base_link"/>

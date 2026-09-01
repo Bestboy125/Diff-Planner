@@ -27,6 +27,7 @@ catkin_install_python(PROGRAMS
 
 install(PROGRAMS
   scripts/run_vla_fastlio_diff_preview.sh
+  scripts/verify_onboard_no_motion.sh
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

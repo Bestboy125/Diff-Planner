@@ -1,5 +1,5 @@
 <launch>
-  <arg name="backend_url" default="http://192.168.14.250:8080"/>
+  <arg name="backend_url" default="http://192.168.5.2:8080"/>
   <arg name="observation_token" default="REQUIRED"/>
   <arg name="calibration_id" default="REQUIRED"/>
   <arg name="calibration_validated" default="false"/>
@@ -9,6 +9,8 @@
   <arg name="camera_frame" default="camera_color_optical_frame"/>
   <arg name="camera_info_topic" default="/camera/color/camera_info"/>
   <arg name="image_compressed_topic" default="/camera/color/image_raw/compressed"/>
+  <arg name="image_raw_topic" default="/camera/color/image_raw"/>
+  <arg name="image_transport" default="compressed"/>
   <arg name="planner_preview_topic" default="/vla/optimized_trajectory_preview"/>
 
   <node pkg="vla_diff_bridge" type="onboard_observation_uplink_node.py"
@@ -21,9 +23,11 @@
     <param name="world_frame" value="$(arg world_frame)"/>
     <param name="body_frame" value="$(arg body_frame)"/>
     <param name="camera_frame" value="$(arg camera_frame)"/>
+    <param name="image_transport" value="$(arg image_transport)"/>
     <remap from="~odom" to="$(arg odom_topic)"/>
     <remap from="~camera_info" to="$(arg camera_info_topic)"/>
     <remap from="~image_compressed" to="$(arg image_compressed_topic)"/>
+    <remap from="~image_raw" to="$(arg image_raw_topic)"/>
     <remap from="~planner_preview" to="$(arg planner_preview_topic)"/>
     <remap from="~status" to="/vla/observation_uplink_status"/>
   </node>

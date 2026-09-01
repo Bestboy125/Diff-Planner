@@ -19,7 +19,7 @@ exec roslaunch vla_diff_bridge vla_fastlio_diff_preview_stack.launch \
   start_network_bridge:=true \
   start_observation_uplink:=true \
   backend_url:="${VLA_BACKEND_URL}" \
-  allowed_host_ip:="${VLA_HOST_IP:-192.168.14.250}" \
+  allowed_host_ip:="${VLA_HOST_IP:-192.168.5.2}" \
   bridge_token:="${VLA_BRIDGE_TOKEN}" \
   observation_token:="${VLA_OBSERVATION_TOKEN}" \
   calibration_id:="${VLA_CALIBRATION_ID}" \
@@ -28,6 +28,8 @@ exec roslaunch vla_diff_bridge vla_fastlio_diff_preview_stack.launch \
   cloud_topic:="${VLA_CLOUD_TOPIC:-/laserMapping/cloud_registered}" \
   camera_info_topic:="${VLA_CAMERA_INFO_TOPIC:-/camera/color/camera_info}" \
   image_compressed_topic:="${VLA_IMAGE_COMPRESSED_TOPIC:-/camera/color/image_raw/compressed}" \
+  image_raw_topic:="${VLA_IMAGE_RAW_TOPIC:-/camera/color/image_raw}" \
+  image_transport:="${VLA_IMAGE_TRANSPORT:-compressed}" \
   world_frame:="${VLA_WORLD_FRAME:-world}" \
   body_frame:="${VLA_BODY_FRAME:-base_link}" \
   camera_frame:="${VLA_CAMERA_FRAME:-camera_color_optical_frame}"
