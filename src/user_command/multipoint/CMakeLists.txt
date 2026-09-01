@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(multipoint)
 
+find_package(Eigen3 REQUIRED)
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
@@ -16,6 +18,7 @@ catkin_package(
 
 include_directories(
   ${EIGEN3_INCLUDE_DIR}
+  ${EIGEN3_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
   
 )

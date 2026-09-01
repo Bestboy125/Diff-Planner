@@ -337,11 +337,16 @@ int main(int argc, char **argv)
   // ros::NodeHandle node;
   ros::NodeHandle nh("~");
 
+  std::string yaw_topic;
+  std::string position_command_topic;
+  nh.param<std::string>("traj_server/yaw_topic", yaw_topic, "/planning/yaw");
+  nh.param<std::string>("traj_server/position_command_topic", position_command_topic, "/position_cmd");
+
   ros::Subscriber poly_traj_sub = nh.subscribe("planning/trajectory", 10, polyTrajCallback);
-  ros::Subscriber yaw_sub = nh.subscribe("/planning/yaw", 10, yawCallback);
+  ros::Subscriber yaw_sub = nh.subscribe(yaw_topic, 10, yawCallback);
   ros::Subscriber heartbeat_sub = nh.subscribe("heartbeat", 10, heartbeatCallback);
   
-  pos_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);
+  pos_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>(position_command_topic, 50);
 
   ros::Timer cmd_timer = nh.createTimer(ros::Duration(0.01), cmdCallback);
 

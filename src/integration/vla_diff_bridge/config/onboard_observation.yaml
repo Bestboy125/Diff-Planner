@@ -1,0 +1,14 @@
+# Fill these values from the actual camera calibration and TF tree, then set
+# calibration_validated=true. Until then the host intentionally rejects frames.
+backend_url: http://192.168.14.250:8080
+observation_token: REQUIRED
+vehicle_id: uav0
+world_frame: world
+body_frame: base_link
+camera_frame: camera_color_optical_frame
+calibration_id: REQUIRED
+calibration_validated: false
+image_transport: compressed
+jpeg_quality: 85
+http_timeout_sec: 1.0
+max_pair_age_ms: 80

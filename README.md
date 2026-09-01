@@ -37,6 +37,10 @@
 ## 运行环境
 本项目基于ROS1开发，请根据所使用ubuntu版本安装对应版本ROS1，支持ubuntu16.04, 18.04和20.04。
 
+## VLA 主机推理桥接
+
+本地集成版本新增了独立的 `vla_diff_bridge` ROS 包，用于接收主机 OpenVLA/π0.5 的共同轨迹格式，并在时效、顺序、里程计和目标边界检查通过后对接 `/goal` 与 `/planning/yaw`。默认只做预览校验，不发布飞行目标。模块说明和部署门槛见 [VLA_BRIDGE_MODIFICATIONS.md](docs/VLA_BRIDGE_MODIFICATIONS.md)。
+
 
 ## 仿真运行步骤
 

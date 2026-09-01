@@ -1,0 +1,12 @@
+<launch>
+  <!-- Planner-only isolation: output is confined to the VLA preview namespace. -->
+  <arg name="odom_topic" default="/ekf/ekf_odom"/>
+  <arg name="cloud_topic" default="/laserMapping/cloud_registered"/>
+
+  <include file="$(find diff_planner)/launch/exp/run_exp_single_lio.launch">
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="goal_topic" value="/vla/preview_goal"/>
+    <arg name="yaw_topic" value="/vla/preview_yaw"/>
+    <arg name="position_command_topic" value="/vla/optimized_trajectory_preview"/>
+  </include>
+</launch>

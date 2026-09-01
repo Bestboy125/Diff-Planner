@@ -1,8 +1,13 @@
 <launch>
     <arg name="odom_topic" value="/ekf/ekf_odom"/>
+    <arg name="goal_topic" default="/goal"/>
+    <arg name="yaw_topic" default="/planning/yaw"/>
+    <arg name="position_command_topic" default="/setpoints_cmd"/>
+    <arg name="cloud_topic" default="/laserMapping/cloud_registered"/>
     <arg name="drone_id"  value="0"/>
     <include file="$(find diff_planner)/launch/include/advanced_param_exp.xml">
         <arg name="odom_topic" value="$(arg odom_topic)"/>
+        <arg name="goal_topic" value="$(arg goal_topic)"/>
         <arg name="drone_id" value="$(arg drone_id)"/>
         <!-- camera pose: transform of camera frame in the world frame -->
         <!-- depth topic: depth image, 640x480 by default -->
@@ -11,7 +16,7 @@
         <arg name="depth_topic" value="no_use1"/>
         <!-- topic of point cloud measurement, such as from LIDAR  -->
         <!-- don't set camera pose and depth, if you already set this one! -->
-        <arg name="cloud_topic" value="/laserMapping/cloud_registered"/>
+        <arg name="cloud_topic" value="$(arg cloud_topic)"/>
         <!-- intrinsic params of the depth camera -->
         <arg name="cx" value="319.31427001953125"/>
         <arg name="cy" value="239.09725952148438"/>
@@ -59,7 +64,8 @@
     </include>
 
     <node pkg="diff_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
-        <remap from="position_cmd" to="/setpoints_cmd"/>
+        <param name="traj_server/position_command_topic" value="$(arg position_command_topic)"/>
+        <param name="traj_server/yaw_topic" value="$(arg yaw_topic)"/>
         <remap from="~planning/trajectory" to="/drone_$(arg drone_id)_planning/trajectory"/>
         <remap from="~planning/yaw" to="/drone_$(arg drone_id)_planning/yaw"/>
         <remap from="~heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat"/>

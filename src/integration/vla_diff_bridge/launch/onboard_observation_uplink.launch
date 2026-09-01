@@ -1,0 +1,24 @@
+<launch>
+  <arg name="backend_url" default="http://192.168.14.250:8080"/>
+  <arg name="observation_token" default="REQUIRED"/>
+  <arg name="calibration_id" default="REQUIRED"/>
+  <arg name="calibration_validated" default="false"/>
+  <arg name="odom_topic" default="/ekf/ekf_odom"/>
+  <arg name="camera_info_topic" default="/camera/color/camera_info"/>
+  <arg name="image_compressed_topic" default="/camera/color/image_raw/compressed"/>
+  <arg name="planner_preview_topic" default="/vla/optimized_trajectory_preview"/>
+
+  <node pkg="vla_diff_bridge" type="onboard_observation_uplink_node.py"
+        name="onboard_observation_uplink" output="screen" required="true">
+    <rosparam command="load" file="$(find vla_diff_bridge)/config/onboard_observation.yaml"/>
+    <param name="backend_url" value="$(arg backend_url)"/>
+    <param name="observation_token" value="$(arg observation_token)"/>
+    <param name="calibration_id" value="$(arg calibration_id)"/>
+    <param name="calibration_validated" value="$(arg calibration_validated)"/>
+    <remap from="~odom" to="$(arg odom_topic)"/>
+    <remap from="~camera_info" to="$(arg camera_info_topic)"/>
+    <remap from="~image_compressed" to="$(arg image_compressed_topic)"/>
+    <remap from="~planner_preview" to="$(arg planner_preview_topic)"/>
+    <remap from="~status" to="/vla/observation_uplink_status"/>
+  </node>
+</launch>
