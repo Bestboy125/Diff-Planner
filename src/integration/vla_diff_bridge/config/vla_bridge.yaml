@@ -6,6 +6,7 @@ allowed_host_ips:
 live_publish_enabled: false
 preview_only_mode: true
 planning_preview_enabled: false
+operator_task_enabled: false
 world_frame: world
 body_frame: base_link
 camera_frame: camera_color_optical_frame
@@ -13,6 +14,8 @@ expected_calibration_id: REQUIRED
 max_source_observation_age_ms: 1000
 max_ttl_ms: 2000
 max_goal_step_m: 1.0
+max_operator_yaw_rad: 1.5708
+takeoff_height_m: 1.0
 min_goal_z_m: 0.1
 max_goal_z_m: 2.0
 max_odom_age_ms: 250

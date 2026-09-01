@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # One-shot launcher for the real-flight planning/control processes plus the
-# isolated VLA preview uplink. This script deliberately contains no MAVROS arm,
+# safety-gated VLA bridge/uplink. This script deliberately contains no MAVROS arm,
 # takeoff, land, mode-switch or actuator command.
 #
 # Prerequisites (started separately):
@@ -12,9 +12,8 @@ set -Eeuo pipefail
 #   - RealSense color stream and CameraInfo
 #   - Windows VLA backend
 #
-# VLA remains preview-only:
-#   /vla/preview_goal, /vla/preview_yaw
-# It is never remapped to /goal or /setpoints_cmd by this launcher.
+# VLA_BRIDGE_MODE defaults to preview. Selecting live additionally requires
+# ENABLE_VLA_LIVE_CONTROL=I_ACCEPT_VLA_AND_OPERATOR_GOAL_PUBLICATION.
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly WORKSPACE_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
@@ -145,6 +144,13 @@ monitor_children() {
 [[ "${VLA_CALIBRATION_ID}" != comm-test-* ]] || \
   fail 'communication-test calibration IDs are forbidden for this launcher'
 
+readonly VLA_BRIDGE_MODE="${VLA_BRIDGE_MODE:-preview}"
+[[ "${VLA_BRIDGE_MODE}" =~ ^(preview|live)$ ]] || fail 'VLA_BRIDGE_MODE must be preview or live'
+if [[ "${VLA_BRIDGE_MODE}" == 'live' ]]; then
+  [[ "${ENABLE_VLA_LIVE_CONTROL:-}" == 'I_ACCEPT_VLA_AND_OPERATOR_GOAL_PUBLICATION' ]] || \
+    fail 'live bridge requires ENABLE_VLA_LIVE_CONTROL=I_ACCEPT_VLA_AND_OPERATOR_GOAL_PUBLICATION'
+fi
+
 readonly MULTIPOINT_START_PLAN="${MULTIPOINT_START_PLAN:-0}"
 readonly MULTIPOINT_BACK_PLAN="${MULTIPOINT_BACK_PLAN:-0}"
 readonly MULTIPOINT_AUTO_PLANNING="${MULTIPOINT_AUTO_PLANNING:-0}"
@@ -207,26 +213,60 @@ require_node_absent /px4ctrl
 require_node_absent /multipointplan
 require_node_absent /drone_0_traj_server
 
-start_launch vla_preview \
-  vla_diff_bridge vla_fastlio_diff_preview_stack.launch \
-  start_diff_planner_preview:=false \
-  start_network_bridge:=true \
-  start_observation_uplink:=true \
-  backend_url:="${VLA_BACKEND_URL}" \
-  allowed_host_ip:="${VLA_HOST_IP:-192.168.5.2}" \
-  bridge_token:="${VLA_BRIDGE_TOKEN}" \
-  observation_token:="${VLA_OBSERVATION_TOKEN}" \
-  calibration_id:="${VLA_CALIBRATION_ID}" \
-  calibration_validated:=true \
-  odom_topic:=/ekf/ekf_odom \
-  cloud_topic:=/laserMapping/cloud_registered \
-  camera_info_topic:="${VLA_CAMERA_INFO_TOPIC:-/camera/color/camera_info}" \
-  image_compressed_topic:="${VLA_IMAGE_COMPRESSED_TOPIC:-/camera/color/image_raw/compressed}" \
-  image_raw_topic:="${VLA_IMAGE_RAW_TOPIC:-/camera/color/image_raw}" \
-  image_transport:="${VLA_IMAGE_TRANSPORT:-compressed}" \
-  world_frame:="${VLA_WORLD_FRAME:-world}" \
-  body_frame:="${VLA_BODY_FRAME:-base_link}" \
-  camera_frame:="${VLA_CAMERA_FRAME:-camera_color_optical_frame}"
+if [[ "${VLA_BRIDGE_MODE}" == 'preview' ]]; then
+  start_launch vla_preview \
+    vla_diff_bridge vla_fastlio_diff_preview_stack.launch \
+    start_diff_planner_preview:=false \
+    start_network_bridge:=true \
+    start_observation_uplink:=true \
+    backend_url:="${VLA_BACKEND_URL}" \
+    allowed_host_ip:="${VLA_HOST_IP:-192.168.5.2}" \
+    bridge_token:="${VLA_BRIDGE_TOKEN}" \
+    observation_token:="${VLA_OBSERVATION_TOKEN}" \
+    calibration_id:="${VLA_CALIBRATION_ID}" \
+    calibration_validated:=true \
+    odom_topic:=/ekf/ekf_odom \
+    cloud_topic:=/laserMapping/cloud_registered \
+    camera_info_topic:="${VLA_CAMERA_INFO_TOPIC:-/camera/color/camera_info}" \
+    image_compressed_topic:="${VLA_IMAGE_COMPRESSED_TOPIC:-/camera/color/image_raw/compressed}" \
+    image_raw_topic:="${VLA_IMAGE_RAW_TOPIC:-/camera/color/image_raw}" \
+    image_transport:="${VLA_IMAGE_TRANSPORT:-compressed}" \
+    world_frame:="${VLA_WORLD_FRAME:-world}" \
+    body_frame:="${VLA_BODY_FRAME:-base_link}" \
+    camera_frame:="${VLA_CAMERA_FRAME:-camera_color_optical_frame}"
+else
+  start_launch vla_control_bridge \
+    vla_diff_bridge vla_diff_bridge.launch \
+    auth_token:="${VLA_BRIDGE_TOKEN}" \
+    allowed_host_ip:="${VLA_HOST_IP:-192.168.5.2}" \
+    live_publish_enabled:=true \
+    preview_only_mode:=false \
+    planning_preview_enabled:=true \
+    operator_task_enabled:=true \
+    expected_calibration_id:="${VLA_CALIBRATION_ID}" \
+    odom_topic:=/ekf/ekf_odom \
+    world_frame:="${VLA_WORLD_FRAME:-world}" \
+    body_frame:="${VLA_BODY_FRAME:-base_link}" \
+    camera_frame:="${VLA_CAMERA_FRAME:-camera_color_optical_frame}" \
+    goal_topic:=/goal \
+    yaw_topic:=/planning/yaw \
+    takeoff_land_topic:=/px4ctrl/takeoff_land
+
+  start_launch vla_observation_uplink \
+    vla_diff_bridge onboard_observation_uplink.launch \
+    backend_url:="${VLA_BACKEND_URL}" \
+    observation_token:="${VLA_OBSERVATION_TOKEN}" \
+    calibration_id:="${VLA_CALIBRATION_ID}" \
+    calibration_validated:=true \
+    odom_topic:=/ekf/ekf_odom \
+    camera_info_topic:="${VLA_CAMERA_INFO_TOPIC:-/camera/color/camera_info}" \
+    image_compressed_topic:="${VLA_IMAGE_COMPRESSED_TOPIC:-/camera/color/image_raw/compressed}" \
+    image_raw_topic:="${VLA_IMAGE_RAW_TOPIC:-/camera/color/image_raw}" \
+    image_transport:="${VLA_IMAGE_TRANSPORT:-compressed}" \
+    world_frame:="${VLA_WORLD_FRAME:-world}" \
+    body_frame:="${VLA_BODY_FRAME:-base_link}" \
+    camera_frame:="${VLA_CAMERA_FRAME:-camera_color_optical_frame}"
+fi
 
 wait_for_node /vla_diff_bridge
 wait_for_node /onboard_observation_uplink
@@ -256,7 +296,7 @@ grep -q '^armed: False$' <<<"${MAVROS_STATE_AFTER}" || \
   fail 'vehicle armed during startup; stopping all launch groups'
 
 log 'All launch groups are ready.'
-log 'VLA is preview-only on /vla/preview_goal and /vla/preview_yaw.'
+log "VLA bridge mode: ${VLA_BRIDGE_MODE}."
 log "Multipoint start_plan=${MULTIPOINT_START_PLAN}; auto_planning=${MULTIPOINT_AUTO_PLANNING}."
 log "Logs: ${LOG_ROOT}"
 log 'Press Ctrl-C to stop all launch groups started by this script.'

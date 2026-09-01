@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Tuple
 import rospy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
-from quadrotor_msgs.msg import PositionCommand
+from quadrotor_msgs.msg import PositionCommand, TakeoffLand
 from std_msgs.msg import Empty, String
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
@@ -20,6 +20,7 @@ from vla_diff_bridge.protocol import (
     EMERGENCY_STOP,
     HOLD,
     PLAN_PREVIEW,
+    OPERATOR_MESSAGE_TYPE,
     TRACK,
     BridgeCommand,
     ProtocolError,
@@ -61,6 +62,7 @@ class VlaDiffBridge:
         self.live_publish_enabled = bool(rospy.get_param("~live_publish_enabled", False))
         self.preview_only_mode = bool(rospy.get_param("~preview_only_mode", True))
         self.planning_preview_enabled = bool(rospy.get_param("~planning_preview_enabled", False))
+        self.operator_task_enabled = bool(rospy.get_param("~operator_task_enabled", False))
         self.world_frame = str(rospy.get_param("~world_frame", "world"))
         self.body_frame = str(rospy.get_param("~body_frame", "base_link"))
         self.camera_frame = str(rospy.get_param("~camera_frame", "camera_color_optical_frame"))
@@ -70,6 +72,8 @@ class VlaDiffBridge:
         )
         self.max_ttl_ms = int(rospy.get_param("~max_ttl_ms", 2000))
         self.max_goal_step_m = float(rospy.get_param("~max_goal_step_m", 1.0))
+        self.max_operator_yaw_rad = float(rospy.get_param("~max_operator_yaw_rad", 1.5708))
+        self.takeoff_height_m = float(rospy.get_param("~takeoff_height_m", 1.0))
         self.min_goal_z_m = float(rospy.get_param("~min_goal_z_m", 0.1))
         self.max_goal_z_m = float(rospy.get_param("~max_goal_z_m", 2.0))
         self.max_odom_age_ms = int(rospy.get_param("~max_odom_age_ms", 250))
@@ -92,6 +96,7 @@ class VlaDiffBridge:
         self.preview_yaw_pub = rospy.Publisher("~preview_yaw", PositionCommand, queue_size=1)
         self.hover_pub = rospy.Publisher("~hover_stop", Empty, queue_size=1)
         self.stop_pub = rospy.Publisher("~mandatory_stop", Empty, queue_size=1)
+        self.takeoff_land_pub = rospy.Publisher("~takeoff_land", TakeoffLand, queue_size=1)
         self.status_pub = rospy.Publisher("~status", String, queue_size=10, latch=True)
         self.odom_sub = rospy.Subscriber("~odom", Odometry, self._odom_callback, queue_size=1)
 
@@ -148,6 +153,8 @@ class VlaDiffBridge:
 
     def _apply(self, command: BridgeCommand) -> Tuple[str, str]:
         with self._lock:
+            if command.message_type == OPERATOR_MESSAGE_TYPE:
+                return self._apply_operator_task(command)
             previous = self._last_sequence.get(command.mission_id, -1)
             if command.sequence <= previous:
                 raise ProtocolError("sequence is duplicate or out of order")
@@ -204,6 +211,81 @@ class VlaDiffBridge:
             self._active_mission_id = None
             self._last_track_monotonic = None
             return "accepted", "mandatory stop published"
+
+    def _apply_operator_task(self, command: BridgeCommand) -> Tuple[str, str]:
+        assert command.task_id is not None
+        assert command.magnitude is not None
+        previous = self._last_sequence.get("operator:" + command.task_id, -1)
+        if command.sequence <= previous:
+            raise ProtocolError("operator task sequence is duplicate or out of order")
+        if command.frame_id != self.world_frame:
+            raise ProtocolError("frame_id does not match onboard world frame")
+        if command.body_frame_id != self.body_frame:
+            raise ProtocolError("body_frame_id does not match onboard body frame")
+
+        movement_commands = {
+            "MOVE_FORWARD",
+            "MOVE_BACKWARD",
+            "MOVE_LEFT",
+            "MOVE_RIGHT",
+            "MOVE_UP",
+            "MOVE_DOWN",
+        }
+        if command.command in movement_commands and command.magnitude > self.max_goal_step_m:
+            raise ProtocolError("operator movement exceeds max_goal_step_m")
+        if command.command in {"YAW_LEFT", "YAW_RIGHT"} and command.magnitude > self.max_operator_yaw_rad:
+            raise ProtocolError("operator rotation exceeds max_operator_yaw_rad")
+        if command.command == "TAKEOFF" and abs(command.magnitude - self.takeoff_height_m) > 0.05:
+            raise ProtocolError("requested takeoff height does not match PX4Ctrl configuration")
+
+        self._last_sequence["operator:" + command.task_id] = command.sequence
+        if self.preview_only_mode or not self.live_publish_enabled or not self.operator_task_enabled:
+            return "operator_locked", "validated; operator task publishing is safety-locked"
+
+        if command.command == "HOLD":
+            self.hover_pub.publish(Empty())
+            return "accepted", "recoverable hover-stop published"
+        if command.command in {"TAKEOFF", "LAND"}:
+            message = TakeoffLand()
+            message.takeoff_land_cmd = 1 if command.command == "TAKEOFF" else 2
+            self.takeoff_land_pub.publish(message)
+            return "accepted", "PX4Ctrl {} request published; no arming command was issued".format(
+                command.command.lower()
+            )
+
+        odom = self._require_fresh_odom()
+        x, y, z, yaw, _ = odom
+        magnitude = command.magnitude
+        if command.command == "YAW_LEFT":
+            target = (x, y, z, math.atan2(math.sin(yaw + magnitude), math.cos(yaw + magnitude)))
+        elif command.command == "YAW_RIGHT":
+            target = (x, y, z, math.atan2(math.sin(yaw - magnitude), math.cos(yaw - magnitude)))
+        else:
+            dx_body = 0.0
+            dy_body = 0.0
+            dz_body = 0.0
+            if command.command == "MOVE_FORWARD":
+                dx_body = magnitude
+            elif command.command == "MOVE_BACKWARD":
+                dx_body = -magnitude
+            elif command.command == "MOVE_LEFT":
+                dy_body = magnitude
+            elif command.command == "MOVE_RIGHT":
+                dy_body = -magnitude
+            elif command.command == "MOVE_UP":
+                dz_body = magnitude
+            else:
+                dz_body = -magnitude
+            target = (
+                x + math.cos(yaw) * dx_body - math.sin(yaw) * dy_body,
+                y + math.sin(yaw) * dx_body + math.cos(yaw) * dy_body,
+                z + dz_body,
+                yaw,
+            )
+            if not self.min_goal_z_m <= target[2] <= self.max_goal_z_m:
+                raise ProtocolError("operator target altitude is outside configured bounds")
+        self._publish_goal(target)
+        return "accepted", "operator target published to Diff-Planner"
 
     def _validate_goal(self, command: BridgeCommand) -> None:
         if command.command not in {TRACK, PLAN_PREVIEW}:
@@ -287,7 +369,9 @@ class VlaDiffBridge:
             "live_publish_enabled": self.live_publish_enabled,
             "preview_only_mode": self.preview_only_mode,
             "planning_preview_enabled": self.planning_preview_enabled,
+            "operator_task_enabled": self.operator_task_enabled,
             "mission_id": command.mission_id if command else self._active_mission_id,
+            "task_id": command.task_id if command else None,
             "sequence": command.sequence if command else None,
             "time_unix_ms": int(time.time() * 1000),
         }

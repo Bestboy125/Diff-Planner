@@ -49,6 +49,22 @@ def valid_preview_payload():
     return payload
 
 
+def valid_operator_payload():
+    return {
+        "schema_version": 3,
+        "type": "operator_task",
+        "task_id": "operator-test",
+        "sequence": 9,
+        "sent_at_unix_ms": int(time.time() * 1000),
+        "ttl_ms": 500,
+        "command": "MOVE_LEFT",
+        "frame_id": "world",
+        "body_frame_id": "base_link",
+        "magnitude": 0.4,
+        "magnitude_unit": "m",
+    }
+
+
 class ProtocolTest(unittest.TestCase):
     def test_accepts_common_model_contract(self):
         parsed = parse_command(valid_payload())
@@ -98,6 +114,19 @@ class ProtocolTest(unittest.TestCase):
         payload["schema_version"] = 1
         payload["type"] = "trajectory_command"
         with self.assertRaisesRegex(ProtocolError, "PLAN_PREVIEW"):
+            parse_command(payload)
+
+    def test_accepts_operator_body_frame_primitive(self):
+        parsed = parse_command(valid_operator_payload())
+        self.assertEqual(parsed.message_type, "operator_task")
+        self.assertEqual(parsed.task_id, "operator-test")
+        self.assertEqual(parsed.command, "MOVE_LEFT")
+        self.assertEqual(parsed.magnitude, 0.4)
+
+    def test_rejects_operator_rotation_with_wrong_unit(self):
+        payload = valid_operator_payload()
+        payload["command"] = "YAW_LEFT"
+        with self.assertRaisesRegex(ProtocolError, "magnitude_unit"):
             parse_command(payload)
 
 
