@@ -1,4 +1,5 @@
 import pathlib
+import re
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -41,6 +42,13 @@ class DropInPackageTest(unittest.TestCase):
     def test_all_launch_files_are_well_formed_xml(self):
         for launch_path in (PACKAGE_ROOT / "launch").glob("*.launch"):
             ET.parse(launch_path)
+
+    def test_python_and_ros_package_versions_match(self):
+        ros_version = ET.parse(PACKAGE_ROOT / "package.xml").getroot().findtext("version")
+        setup_text = (PACKAGE_ROOT / "setup.py").read_text(encoding="utf-8")
+        python_version = re.search(r'version="([^"]+)"', setup_text)
+        self.assertIsNotNone(python_version)
+        self.assertEqual(ros_version, python_version.group(1))
 
     def test_diff_planner_include_receives_only_supported_arguments(self):
         workspace_src = PACKAGE_ROOT.parents[1]

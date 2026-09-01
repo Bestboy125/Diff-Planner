@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="vla_diff_bridge",
-    version="0.2.0",
+    version="0.3.0",
     packages=find_packages("src"),
     package_dir={"": "src"},
 )
