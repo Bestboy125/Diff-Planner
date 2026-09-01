@@ -225,7 +225,16 @@ class ObservationUplink:
                 with urlopen(request, timeout=self.http_timeout_sec) as response:
                     response.read()
                 self._publish_status("online", "uploaded observation {}".format(payload["sequence"]))
-            except (HTTPError, URLError, TimeoutError) as exc:
+            except HTTPError as exc:
+                try:
+                    response_detail = exc.read().decode("utf-8", errors="replace")
+                except Exception:
+                    response_detail = ""
+                detail = "upload failed: {}".format(exc)
+                if response_detail:
+                    detail = "{}; response={}".format(detail, response_detail[:1000])
+                self._publish_status("degraded", detail)
+            except (URLError, TimeoutError) as exc:
                 self._publish_status("degraded", "upload failed: {}".format(exc))
             except Exception as exc:
                 self._publish_status("drop", "observation assembly failed: {}".format(exc))
