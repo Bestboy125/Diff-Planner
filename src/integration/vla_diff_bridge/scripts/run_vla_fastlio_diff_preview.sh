@@ -8,6 +8,7 @@ set -euo pipefail
 : "${VLA_OBSERVATION_TOKEN:?set VLA_OBSERVATION_TOKEN}"
 : "${VLA_CALIBRATION_ID:?set VLA_CALIBRATION_ID}"
 : "${VLA_CALIBRATION_VALIDATED:?confirm CameraInfo and body<-camera TF first}"
+: "${VLA_HOST_IP:?set VLA_HOST_IP to the host address on the onboard network}"
 
 if [[ "${VLA_CALIBRATION_VALIDATED}" != "I_VALIDATED_CAMERA_INFO_AND_TF" ]]; then
   echo "VLA_CALIBRATION_VALIDATED must equal I_VALIDATED_CAMERA_INFO_AND_TF" >&2
@@ -19,7 +20,7 @@ exec roslaunch vla_diff_bridge vla_fastlio_diff_preview_stack.launch \
   start_network_bridge:=true \
   start_observation_uplink:=true \
   backend_url:="${VLA_BACKEND_URL}" \
-  allowed_host_ip:="${VLA_HOST_IP:-192.168.5.2}" \
+  allowed_host_ip:="${VLA_HOST_IP}" \
   bridge_token:="${VLA_BRIDGE_TOKEN}" \
   observation_token:="${VLA_OBSERVATION_TOKEN}" \
   calibration_id:="${VLA_CALIBRATION_ID}" \

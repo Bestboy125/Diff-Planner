@@ -1,5 +1,5 @@
 #!/bin/zsh
-echo 'nv' | sudo -S chmod 777 /dev/tty* & sleep 1;
+sudo chmod 777 /dev/tty* & sleep 1;
 roslaunch mavros px4.launch & sleep 2;
 rosrun mavros mavcmd long 511 31 5000 0 0 0 0 0 & sleep 1;   # ATTITUDE_QUATERNION
 rosrun mavros mavcmd long 511 105 5000 0 0 0 0 0 & sleep 1;  # HIGHRES_IMU

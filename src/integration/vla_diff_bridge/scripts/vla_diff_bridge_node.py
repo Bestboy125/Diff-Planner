@@ -58,7 +58,7 @@ class VlaDiffBridge:
         self.bind_host = rospy.get_param("~bind_host", "0.0.0.0")
         self.port = int(rospy.get_param("~port", 50051))
         self.auth_token = str(rospy.get_param("~auth_token", "REQUIRED"))
-        self.allowed_host_ips = set(rospy.get_param("~allowed_host_ips", ["192.168.5.2"]))
+        self.allowed_host_ips = set(rospy.get_param("~allowed_host_ips", ["127.0.0.1"]))
         self.live_publish_enabled = bool(rospy.get_param("~live_publish_enabled", False))
         self.preview_only_mode = bool(rospy.get_param("~preview_only_mode", True))
         self.planning_preview_enabled = bool(rospy.get_param("~planning_preview_enabled", False))

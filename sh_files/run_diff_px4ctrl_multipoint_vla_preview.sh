@@ -129,11 +129,12 @@ monitor_children() {
 }
 
 : "${ENABLE_FLIGHT_STACK:?set ENABLE_FLIGHT_STACK to I_UNDERSTAND_THIS_STARTS_PX4CTRL}"
-: "${VLA_BACKEND_URL:?set VLA_BACKEND_URL, for example http://192.168.5.2:8080}"
+: "${VLA_BACKEND_URL:?set VLA_BACKEND_URL, for example http://HOST_ONBOARD_IP:8080}"
 : "${VLA_BRIDGE_TOKEN:?set VLA_BRIDGE_TOKEN}"
 : "${VLA_OBSERVATION_TOKEN:?set VLA_OBSERVATION_TOKEN}"
 : "${VLA_CALIBRATION_ID:?set the validated VLA_CALIBRATION_ID}"
 : "${VLA_CALIBRATION_VALIDATED:?confirm CameraInfo and body<-camera TF first}"
+: "${VLA_HOST_IP:?set VLA_HOST_IP to the host address on the onboard network}"
 
 [[ "${ENABLE_FLIGHT_STACK}" == 'I_UNDERSTAND_THIS_STARTS_PX4CTRL' ]] || \
   fail 'ENABLE_FLIGHT_STACK confirmation does not match'
@@ -220,7 +221,7 @@ if [[ "${VLA_BRIDGE_MODE}" == 'preview' ]]; then
     start_network_bridge:=true \
     start_observation_uplink:=true \
     backend_url:="${VLA_BACKEND_URL}" \
-    allowed_host_ip:="${VLA_HOST_IP:-192.168.5.2}" \
+    allowed_host_ip:="${VLA_HOST_IP}" \
     bridge_token:="${VLA_BRIDGE_TOKEN}" \
     observation_token:="${VLA_OBSERVATION_TOKEN}" \
     calibration_id:="${VLA_CALIBRATION_ID}" \
@@ -238,7 +239,7 @@ else
   start_launch vla_control_bridge \
     vla_diff_bridge vla_diff_bridge.launch \
     auth_token:="${VLA_BRIDGE_TOKEN}" \
-    allowed_host_ip:="${VLA_HOST_IP:-192.168.5.2}" \
+    allowed_host_ip:="${VLA_HOST_IP}" \
     live_publish_enabled:=true \
     preview_only_mode:=false \
     planning_preview_enabled:=true \

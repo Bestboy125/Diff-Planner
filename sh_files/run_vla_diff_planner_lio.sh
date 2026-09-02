@@ -4,7 +4,7 @@ set -euo pipefail
 WORKSPACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${1:---bridge-only}"
 LIVE_OUTPUT="${VLA_BRIDGE_LIVE_OUTPUT_ENABLED:-false}"
-HOST_IP="${VLA_HOST_ONBOARD_IP:-192.168.14.250}"
+HOST_IP="${VLA_HOST_ONBOARD_IP:-}"
 AUTH_TOKEN="${VLA_BRIDGE_AUTH_TOKEN:-}"
 ODOM_TOPIC="${VLA_ODOM_TOPIC:-/ekf/ekf_odom}"
 START_RVIZ="${VLA_START_RVIZ:-false}"
@@ -12,6 +12,11 @@ PIDS=()
 
 if [[ -z "${AUTH_TOKEN}" || "${AUTH_TOKEN}" == "REQUIRED" ]]; then
   echo "VLA_BRIDGE_AUTH_TOKEN must be set to the same non-default secret as the host backend." >&2
+  exit 2
+fi
+
+if [[ -z "${HOST_IP}" ]]; then
+  echo "VLA_HOST_ONBOARD_IP must be set to the host address on the onboard network." >&2
   exit 2
 fi
 

@@ -1,5 +1,5 @@
 <launch>
-  <arg name="backend_url" default="http://192.168.5.2:8080"/>
+  <arg name="backend_url" default="http://127.0.0.1:8080"/>
   <arg name="observation_token" default="REQUIRED"/>
   <arg name="calibration_id" default="REQUIRED"/>
   <arg name="calibration_validated" default="false"/>

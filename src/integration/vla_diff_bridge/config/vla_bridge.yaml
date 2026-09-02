@@ -2,7 +2,7 @@
 bind_host: 0.0.0.0
 port: 50051
 allowed_host_ips:
-  - 192.168.5.2
+  - 127.0.0.1
 live_publish_enabled: false
 preview_only_mode: true
 planning_preview_enabled: false

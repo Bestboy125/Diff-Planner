@@ -15,8 +15,8 @@
   <arg name="body_frame" default="base_link"/>
   <arg name="camera_frame" default="camera_color_optical_frame"/>
 
-  <arg name="backend_url" default="http://192.168.5.2:8080"/>
-  <arg name="allowed_host_ip" default="192.168.5.2"/>
+  <arg name="backend_url" default="http://127.0.0.1:8080"/>
+  <arg name="allowed_host_ip" default="127.0.0.1"/>
   <arg name="bridge_token" default="REQUIRED"/>
   <arg name="observation_token" default="REQUIRED"/>
   <arg name="calibration_id" default="REQUIRED"/>

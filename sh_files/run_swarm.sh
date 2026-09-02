@@ -11,14 +11,15 @@ export POINT3_X=3.5; export POINT3_Y=0.0; export POINT3_Z=1.0;
 export POINT4_X=3.5; export POINT4_Y=0.0; export POINT4_Z=1.0;
 
 export DRONE_NUM=1;
-export DRONE_IP_0=192.168.8.190;
-export DRONE_IP_1=192.168.8.191;
-export DRONE_IP_2=192.168.8.192;
-export DRONE_IP_3=192.168.8.193;
-export DRONE_IP_4=192.168.8.194;
-export GS_IP=192.168.8.28;
+: "${DRONE_IP_0:?Set DRONE_IP_0 in a private deployment environment}";
+: "${DRONE_IP_1:?Set DRONE_IP_1 in a private deployment environment}";
+: "${DRONE_IP_2:?Set DRONE_IP_2 in a private deployment environment}";
+: "${DRONE_IP_3:?Set DRONE_IP_3 in a private deployment environment}";
+: "${DRONE_IP_4:?Set DRONE_IP_4 in a private deployment environment}";
+: "${GS_IP:?Set GS_IP in a private deployment environment}";
+export DRONE_IP_0 DRONE_IP_1 DRONE_IP_2 DRONE_IP_3 DRONE_IP_4 GS_IP;
 
-echo 'nv' | sudo -S chmod 777 /dev/tty* & sleep 1;
+sudo chmod 777 /dev/tty* & sleep 1;
 roslaunch mavros px4.launch & sleep 4;
 rosrun mavros mavcmd long 511 31 5000 0 0 0 0 0 & sleep 1;   # ATTITUDE_QUATERNION
 rosrun mavros mavcmd long 511 105 5000 0 0 0 0 0 & sleep 1;  # HIGHRES_IMU

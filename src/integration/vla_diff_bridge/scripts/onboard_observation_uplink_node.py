@@ -20,7 +20,7 @@ import tf2_ros
 
 class ObservationUplink:
     def __init__(self) -> None:
-        self.backend_url = str(rospy.get_param("~backend_url", "http://192.168.5.2:8080")).rstrip("/")
+        self.backend_url = str(rospy.get_param("~backend_url", "http://127.0.0.1:8080")).rstrip("/")
         self.token = str(rospy.get_param("~observation_token", "REQUIRED"))
         self.vehicle_id = str(rospy.get_param("~vehicle_id", "uav0"))
         self.world_frame = str(rospy.get_param("~world_frame", "world"))

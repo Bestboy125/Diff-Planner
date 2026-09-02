@@ -1,181 +1,166 @@
-<img src="images/nus_logo.png" alt="nus logo" align="right" height="80" />
+<img src="images/nus_logo.png" alt="Diff-Planner logo" align="right" height="80" />
 
-# Diff-Planner
+# Diff-Planner VLA Integration Fork
 
-## 概述
-**Diff-Planner** 是为**微分智飞**公司旗下教育无人机子品牌**非凸空间**适配的单机导航避障算法。其基于开源算法 **[EGO-Planner-v2](https://github.com/ZJU-FAST-Lab/EGO-Planner-v2)** ，并由原班人马深度参与算法优化。在继承 **EGO-Planner** 优秀框架的基础上，针对教育无人机平台的特殊需求进行了全面适配和增强，旨在提供更稳定、更可靠的科研体验。
+This repository is a ROS 1 local-planning stack for autonomous UAV navigation.
+It is based on Diff-Planner and EGO-Planner-v2, with an incremental integration
+package that connects remote OpenVLA/π0.5 semantic decisions to onboard
+localization, obstacle avoidance, and trajectory generation.
+
+The fork uses a hierarchical control architecture: the remote VLA policy
+proposes short, bounded local goals at a low rate, while FAST-LIO/EKF and
+Diff-Planner continue mapping, state estimation, collision checking, and
+trajectory optimization onboard at a higher rate. VLA output is never treated
+as a motor, attitude, or raw actuator command.
 
 <p align="center">
-  <img src="images/navigation.gif" alt="nav" width="600" />
+  <img src="images/navigation.gif" alt="Diff-Planner navigation demonstration" width="600" />
 </p>
 
-## 算法优化
-- **Diff-Planner** 在 **[EGO-Planner-v2](https://github.com/ZJU-FAST-Lab/EGO-Planner-v2)** 基础上做了多处优化，包括：
->+ **修复**局部规划时 A* 终点在障碍物里，尝试沿 A* 起始方向推出障碍物时的bug。
+## Main capabilities
 
->+ **修复**优化过程中频繁打印局部目标点在障碍物里（"Local target in collision, skip this planning."），规划器卡死的bug。
+- single-UAV and multi-UAV local trajectory planning;
+- lidar and visual-localization launch configurations;
+- A* and optimization robustness improvements inherited from Diff-Planner;
+- waypoint and return-path support through the `user_command` packages;
+- yaw-aware trajectory-server output; and
+- a safety-gated VLA bridge for observation upload, command validation, preview,
+  and optional planner-goal publication.
 
->+ **修复**在状态机中使用 **planNextWaypoint()** 导致状态机卡死的bug。
+## VLA integration package
 
->+ **新增**规划优化异常检测， 避免动力学不可行的轨迹发出，新增了动力学容忍值（[advanced_param_exp.xml](src/diff_planner/plan_manage/launch/include/advanced_param_exp.xml)中设置）：\
-\<param name="optimization/vel_tolerance" value="1.0" type="double"/>  \
-\<param name="optimization/acc_tolerance" value="1.0" type="double"/>
+`src/integration/vla_diff_bridge` is an independent catkin package. It provides:
 
->+ **修复**遇到大障碍物后，无人机在大障碍物面前反复徘徊卡死的bug，同时增加是否使用大障碍物检测的开关（[advanced_param_exp.xml](src/diff_planner/plan_manage/launch/include/advanced_param_exp.xml)中设置）：\
->\<param name="fsm/enable_stuck_detect" value="true"/> 
+- `onboard_observation_uplink_node.py` — uploads synchronized RGB images,
+  CameraInfo, odometry, transforms, and optional planner-preview feedback without
+  blocking the camera callback;
+- `vla_diff_bridge_node.py` — receives TCP/NDJSON commands and validates source,
+  token, schema, sequence, TTL, calibration, coordinate frames, odometry age,
+  and goal limits;
+- preview-only ROS topics that remain isolated from the flight-control chain;
+- optional live publication to `/goal` and `/planning/yaw` behind explicit,
+  independent safety gates; and
+- launch files and wrappers for FAST-LIO/EKF integration.
 
->+ **新增**优化失败次数过多的处理。
+Checked-in network settings use loopback or `REQUIRED` placeholders. Deployment
+addresses, authentication tokens, camera serial numbers, and calibration IDs
+must be supplied through a private environment file and must never be committed.
 
->+ **新增**激光雷达建图 **raycast** 版本，使激光雷达建图更加稳定。
+## Safety defaults
 
->+ **新增**用户接口 **user_command** 功能包，使用户能以多种方式设置途径点以及设置返程点。
+The VLA integration fails closed:
 
->+ **traj_server** 节点**新增**yaw角控制接口，用户可根据需要在规划过程中控制无人机yaw角。
+- `live_publish_enabled` defaults to `false`;
+- `preview_only_mode` defaults to `true`;
+- authentication and calibration values default to `REQUIRED`;
+- live startup requires explicit host and onboard confirmation gates;
+- stale, future-dated, out-of-order, oversized, non-finite, or out-of-bounds
+  commands are rejected; and
+- the VLA preview wrappers do not arm PX4, switch its flight mode, or issue an
+  automatic takeoff command.
 
-- **本项目会长期维护并根据用户反馈持续优化。**
+Some original Diff-Planner scripts are intended for real flight and can start
+PX4Ctrl or publish mission goals. Read every launcher before use, keep the
+vehicle disarmed during integration checks, and follow a separate supervised
+flight procedure.
 
-## 运行环境
-本项目基于ROS1开发，请根据所使用ubuntu版本安装对应版本ROS1，支持ubuntu16.04, 18.04和20.04。
+## Requirements
 
-## VLA 主机推理桥接
+- Ubuntu 20.04 with ROS Noetic for the validated ROS 1 deployment path;
+- catkin and the dependencies declared by the included packages;
+- a compatible FAST-LIO/EKF odometry source and registered point cloud for the
+  lidar configuration; and
+- camera topics and a validated `body <- camera` TF for VLA observation upload.
 
-本地集成版本新增了独立的 `vla_diff_bridge` ROS 包，用于接收主机 OpenVLA/π0.5 的共同轨迹格式，并在时效、顺序、里程计和目标边界检查通过后对接 `/goal` 与 `/planning/yaw`。默认只做预览校验，不发布飞行目标。模块说明和部署门槛见 [VLA_BRIDGE_MODIFICATIONS.md](docs/VLA_BRIDGE_MODIFICATIONS.md)。
+The upstream planner also supports older ROS 1/Ubuntu combinations, but the VLA
+integration should be revalidated before using a different platform.
 
+## Build
 
-## 仿真运行步骤
-
-### 1. 下载源码并编译:
-```
-git clone https://github.com/DifferentialRobotics/Diff-Planner.git
+```bash
+git clone --recursive <repository-url>
 cd Diff-Planner
 catkin_make
+source devel/setup.bash
 ```
 
-### 2. 单机rviz手动指点飞行：
-```
-cd Diff-Planner
-source devel/setup.zsh # 如果使用bash终端，则执行: source devel/setup.bash
+The integration package is built incrementally with the rest of this catkin
+workspace; no replacement of the core planner package is required.
+
+## Planner simulation
+
+Start the single-UAV RViz simulation:
+
+```bash
+source devel/setup.bash
 roslaunch diff_planner run_sim_single.launch
 ```
-使用rviz中的**3D Nav Goal**插件，在地图上按住左键选择目标点x-y平面位置，按住左键不松手同时按住右键上下拖动调整目标点z轴位置，之后松开鼠标即发送目标点，无人机开始规划。
-<p align="center">
-  <img src="images/rviz_test.gif" alt="rviz_tes" width="600" />
-</p>
 
+Use RViz **3D Nav Goal** to provide a target. For the upstream preset-waypoint
+workflow, configure `src/user_command/multipoint/config/points.yaml`, then run
+the relevant `multipoint` launch or trigger script.
 
-### 3. 单机预设点飞行：
-在 [points.yaml](src/user_command/multipoint/config/points.yaml) 文件中 `test1` 下设置期望途经点，`test_back` 下设置返程目标点，之后通过以下指令执行任务：
+## Safe VLA preview
+
+Create a private onboard environment file outside the repository, for example
+`~/.config/vla_stack.env`, containing at least:
+
+```bash
+export VLA_BACKEND_URL=http://<HOST_ONBOARD_IP>:8080
+export VLA_HOST_IP=<HOST_ONBOARD_IP>
+export VLA_BRIDGE_TOKEN=<RANDOM_BRIDGE_TOKEN>
+export VLA_OBSERVATION_TOKEN=<RANDOM_OBSERVATION_TOKEN>
+export VLA_CALIBRATION_ID=<VALIDATED_CALIBRATION_ID>
+export VLA_CALIBRATION_VALIDATED=I_VALIDATED_CAMERA_INFO_AND_TF
+export VLA_BRIDGE_MODE=preview
 ```
-cd Diff-Planner
-source devel/setup.zsh
-roslaunch diff_planner run_sim_single.launch
-cd Diff-Planner #新建终端
-./sh_files/pub_trigger.sh #开始执行任务 或在rviz中用2D Nav Goal插件在地图任意位置点击也能开始执行任务
-./sh_files/back.sh #开始返程规划
+
+Before starting the full preview wrapper, provide ROS master, MAVROS telemetry,
+FAST-LIO/EKF odometry, registered point cloud, and camera topics. The wrapper
+checks that MAVROS is connected and the vehicle is disarmed. It does not arm the
+vehicle:
+
+```bash
+./sh_files/start_onboard_vla_full_preview.sh
 ```
-注：通过修改 [multipointplan_sim.launch](src/user_command/multipoint/launch/multipointplan_sim.launch) 中的 `fligt_type` 可实现多种指点规划方式，如自定义到达每个途经点过程中的飞机yaw角，控制到达每个途经点后的停留时间等，详见 [points.yaml](src/user_command/multipoint/config/points.yaml) 顶部注释。
 
-### 4. 集群预设点飞行：
-在 [run_sim_swarm.launch](src/diff_planner/plan_manage/launch/sim/run_sim_swarm.launch) 中设置每架无人机的目标点 `target0_x/y/z`，之后通过以下指令执行任务：
-```
-cd Diff-Planner
-source devel/setup.zsh
-roslaunch diff_planner run_sim_swarm.launch
-cd Diff-Planner #新建终端
-./sh_files/pub_swarm_trigger.sh #开始执行任务
-```
-<p align="center">
-  <img src="images/swarm.gif" alt="rviz_tes" width="600" />
-</p>
+For a planner-only isolated preview, review and invoke
+`src/integration/vla_diff_bridge/scripts/run_vla_fastlio_diff_preview.sh` with
+the same private environment values. Never use placeholder values on a real
+network.
 
-## 实机运行步骤
+## Coordinate and command contract
 
-### 1. 下载源码并编译
-  ```
-  git clone --recursive https://github.com/DifferentialRobotics/Diff-Planner.git
-  cd Diff-Planner
-  catkin_make
-  ```
+The integration uses these default semantics:
 
-### 2. 雷达定位自主避障飞行
-0. 按照 **faster-lio** 中的readme配置好雷达定位参数，并启动雷达定位脚本测试定位是否正常：
-    ```
-    cd Diff-Planner
-    ./sh_files/run_lio.sh
-    ```
-    启动脚本后拿起无人机在空中晃动，并沿飞行场地行走一圈后放回原地，查看定位是否稳定。
+- world frame: right-handed, Z-up local frame shared by EKF and Diff-Planner;
+- body frame: ROS FLU (`x` forward, `y` left, `z` up);
+- optical frame: ROS camera convention (`x` right, `y` down, `z` forward);
+- VLA action: `[dx_body, dy_body, dz_body, d_yaw]` in metres and radians; and
+- planner target: a bounded absolute position in the configured world frame.
 
-1. 在配置文件 [multipointplan_exp_lio.launch](src/user_command/multipoint/launch/multipointplan_exp_lio.launch) 中
-查看设置的飞行模式
+The host performs the initial body-to-world conversion. The onboard bridge then
+checks frame names, calibration identity, observation freshness, odometry
+freshness, target step, altitude bounds, sequence, and command lifetime before
+publishing a preview or live target.
 
-    >+  `fligt_type` 为 1 表示选择 `test1` 模式进行多点规划，即依次经过各途经点
+## Documentation
 
-    >+  `fligt_type` 为 2 表示选择 `test2` 模式进行多点规划，可以控制到达各途径点后的停留时间
+- `docs/VLA_BRIDGE_MODIFICATIONS.md` — fork-level integration changes.
+- `src/integration/vla_diff_bridge/docs/01_ARCHITECTURE.md` — package architecture.
+- `src/integration/vla_diff_bridge/docs/02_PROTOCOL.md` — wire protocol.
+- `src/integration/vla_diff_bridge/docs/03_LAUNCH_AND_CONFIG.md` — parameters and launch usage.
+- `src/integration/vla_diff_bridge/docs/04_SAFETY_AND_TESTING.md` — safety and validation strategy.
+- `src/integration/vla_diff_bridge/docs/10_ONBOARD_DEPLOYMENT.md` — sanitized deployment record.
 
-    >+  其余模式的定义可在 [points.yaml](src/user_command/multipoint/config/points.yaml) 中找到
-    
-    >+  当设置 `auto_planning` 为1时，起飞悬停后会开始自动规划
-    
-    >+  当设置 `auto_landing` 为1时，到达最后一个目标点后会自动降落
+## Upstream projects and acknowledgements
 
-2. 在 [points.yaml](src/user_command/multipoint/config/points.yaml) 中设置 `test1` 对应的途径点坐标，以及返程规划的途径点坐标。
+This fork retains the work of the Diff-Planner maintainers and is derived from
+[EGO-Planner-v2](https://github.com/ZJU-FAST-Lab/EGO-Planner-v2) by ZJU FAST Lab.
+Please preserve all upstream copyright and attribution notices.
 
-3. 检查 [ctrl_param_fpv.yaml](src/realflight_modules/px4ctrl/config/ctrl_param_fpv.yaml) 中起飞高度 `takeoff_height` 设置是否合适。
+## License
 
-4. 打开遥控器，确认拨杆位置是否正确。
-
-5. 进入 Diff-Planner 工作空间并启动雷达定位导航脚本
-    ```
-    cd ~/Diff-Planner
-    ./sh_files/run_all_lio.sh
-    ```
-    > 注意：若没有执行规划任务需求只是测试程序，请保持无人机处于急停状态或关闭遥控器，以免误触遥控器导致无人机自动起飞！！！
-
-    待程序完全启动后 rviz 界面如下所示：
-    ![rviz_point_cloud](images/rviz_point_cloud_1.png)
-
-6. 起飞：
-    ```
-    cd ~/Diff-Planner
-    ./sh_files/takeoff.sh
-    ```
-
-7. 执行规划任务：
-    ```
-    cd ~/Diff-Planner
-    ./sh_files/pub_trigger.sh
-    ```
-
-8. 返程规划：
-    ```
-    cd ~/Diff-Planner
-    ./sh_files/back.sh
-    ```
-
-9. 降落：
-    ```
-    cd ~/Diff-Planner
-    ./sh_files/land.sh
-    ```
-    > 注意：待无人机落地后及时锁桨并在任务终端输入 ctrl+c 结束任务。
-    > 起飞/执行规划任务/返程规划/降落也可使用遥控器控制，详见配套产品手册。
-
-### 3. 视觉定位自主避障飞行
-若要使用**视觉定位**下规划，需要先在 [run_exp_single_vio.launch](src/diff_planner/plan_manage/launch/exp/run_exp_single_vio.launch) 中替换深度相机内参 `cx/cy/fx/fy`，内参查看方式：
-```
-cd Diff-Planner
-./sh_files/run_vins.sh
-rostopic echo /camera/depth/camera_info
-```
-消息中的K矩阵即为深度相机内参，注意矩阵中的顺序为 `fx/cx/fy/cy`。
-
-视觉定位下规划脚本为 [run_single_vio.sh](sh_files/run_single_vio.sh) ，
-其余配置方式与程序执行逻辑与雷达定位一致。
-
-## 致谢与声明
-本项目在开发过程中参考并使用了 **[EGO-Planner-v2](https://github.com/ZJU-FAST-Lab/EGO-Planner-v2)**，特此感谢浙江大学 **FAST-Lab** 团队的开源贡献。
-
-相关代码均严格遵循原项目的开源许可协议使用，用户在使用本项目时，请务必遵守相应的许可证条款。
-
-# Q&A
-请随时提交问题或讨论，我们会在看到问题后尽快回复。
+This repository is distributed under the GNU General Public License v3.0. See
+`LICENSE` for the complete terms. External dependencies, model weights, datasets,
+and simulator assets remain subject to their own licenses.

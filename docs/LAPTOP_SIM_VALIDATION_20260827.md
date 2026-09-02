@@ -1,7 +1,7 @@
 # 笔记本 VLA–Diff-Planner 仿真验证报告
 
 验证日期：2026-08-27  
-笔记本：`oem@192.168.9.164`  
+笔记本：`<SIM_USER>@<SIM_HOST>`
 远端分支：`vla-sim-integration`
 
 ## 1. 验证结论
@@ -39,7 +39,8 @@ Windows 主机真实 OpenVLA 推理
 
 专用 headless 地图使用 40 个柱状障碍和 20 个圆形障碍，以降低笔记本 CPU 负载并保持软件验收稳定。桥接服务监听 TCP 50051，启用 token、发送端 IP 白名单、序列号、TTL、有限数值、步长和高度约束。
 
-Windows 主机通过该网络路由连接笔记本时，笔记本实际看到的来源地址是 `192.168.14.250`，不是操作网页所在接口的 `192.168.9.162`，因此仿真白名单按实际来源地址配置。
+Windows 主机通过路由连接仿真机时，仿真机看到的来源地址可能不同于操作网页所在接口，
+因此仿真白名单必须按运行时实际来源地址配置，不能把本地实测地址写入仓库。
 
 ## 4. 验证结果
 
@@ -124,7 +125,7 @@ roslaunch diff_planner run_sim_vla_headless.launch
 
 roslaunch vla_diff_bridge vla_diff_bridge.launch \
   auth_token:='<test-token>' \
-  allowed_host_ip:='192.168.14.250' \
+  allowed_host_ip:='<HOST_SIMULATION_IP>' \
   live_publish_enabled:=true \
   odom_topic:=/drone_0_visual_slam/odom
 ```
