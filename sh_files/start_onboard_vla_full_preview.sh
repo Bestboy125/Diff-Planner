@@ -65,10 +65,35 @@ wait_node() {
   local node="$1"
   local timeout_sec="${2:-30}"
   local deadline=$((SECONDS + timeout_sec))
-  until rosnode info "${node}" >/dev/null 2>&1; do
+  until rosnode list 2>/dev/null | grep -Fxq -- "${node}"; do
     ((SECONDS < deadline)) || fail "node did not become ready: ${node}"
     sleep 0.5
   done
+}
+
+node_exists() {
+  local node="$1"
+  rosnode list 2>/dev/null | grep -Fxq -- "${node}"
+}
+
+wait_mavros_connected_disarmed() {
+  local timeout_sec="${1:-30}"
+  local deadline=$((SECONDS + timeout_sec))
+  local state=''
+
+  while ((SECONDS < deadline)); do
+    state="$(timeout 2 rostopic echo -n 1 /mavros/state 2>/dev/null || true)"
+    if grep -q '^armed: True$' <<<"${state}"; then
+      fail 'vehicle became armed while waiting for MAVROS; refusing to continue'
+    fi
+    if grep -q '^connected: True$' <<<"${state}" && \
+       grep -q '^armed: False$' <<<"${state}"; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  fail "MAVROS did not reach connected=True, armed=False within ${timeout_sec}s"
 }
 
 wait_topic() {
@@ -83,13 +108,11 @@ if ! rosnode list >/dev/null 2>&1; then
   wait_node /rosout 15
 fi
 
-if ! rosnode info /mavros >/dev/null 2>&1; then
+if ! node_exists /mavros; then
   start_owned mavros roslaunch mavros px4.launch
   wait_node /mavros 30
 fi
-readonly MAVROS_STATE="$(timeout 5 rostopic echo -n 1 /mavros/state 2>/dev/null || true)"
-grep -q '^connected: True$' <<<"${MAVROS_STATE}" || fail 'MAVROS is not connected'
-grep -q '^armed: False$' <<<"${MAVROS_STATE}" || fail 'vehicle must be disarmed'
+wait_mavros_connected_disarmed 30
 
 if ! timeout 2 rostopic echo -n 1 /laserMapping/cloud_registered >/dev/null 2>&1; then
   start_owned faster_lio roslaunch faster_lio mapping_mid360.launch
