@@ -1,0 +1,43 @@
+<launch>
+  <arg name="auth_token" default="REQUIRED"/>
+  <arg name="live_publish_enabled" default="false"/>
+  <arg name="preview_only_mode" default="true"/>
+  <arg name="planning_preview_enabled" default="false"/>
+  <arg name="operator_task_enabled" default="false"/>
+  <arg name="expected_calibration_id" default="REQUIRED"/>
+  <arg name="allowed_host_ip" default="127.0.0.1"/>
+  <arg name="odom_topic" default="/ekf/ekf_odom"/>
+  <arg name="world_frame" default="world"/>
+  <arg name="body_frame" default="base_link"/>
+  <arg name="camera_frame" default="camera_color_optical_frame"/>
+  <arg name="goal_topic" default="/goal"/>
+  <arg name="yaw_topic" default="/planning/yaw"/>
+  <arg name="hover_stop_topic" default="/vla_hover_stop_to_planner"/>
+  <arg name="mandatory_stop_topic" default="/mandatory_stop_to_planner"/>
+  <arg name="takeoff_land_topic" default="/px4ctrl/takeoff_land"/>
+  <arg name="preview_goal_topic" default="/vla/preview_goal"/>
+  <arg name="preview_yaw_topic" default="/vla/preview_yaw"/>
+
+  <node pkg="vla_diff_bridge" type="vla_diff_bridge_node.py" name="vla_diff_bridge" output="screen" required="true">
+    <rosparam command="load" file="$(find vla_diff_bridge)/config/vla_bridge.yaml"/>
+    <param name="auth_token" value="$(arg auth_token)"/>
+    <param name="live_publish_enabled" value="$(arg live_publish_enabled)"/>
+    <param name="preview_only_mode" value="$(arg preview_only_mode)"/>
+    <param name="planning_preview_enabled" value="$(arg planning_preview_enabled)"/>
+    <param name="operator_task_enabled" value="$(arg operator_task_enabled)"/>
+    <param name="expected_calibration_id" value="$(arg expected_calibration_id)"/>
+    <param name="world_frame" value="$(arg world_frame)"/>
+    <param name="body_frame" value="$(arg body_frame)"/>
+    <param name="camera_frame" value="$(arg camera_frame)"/>
+    <rosparam param="allowed_host_ips" subst_value="true">["$(arg allowed_host_ip)"]</rosparam>
+    <remap from="~odom" to="$(arg odom_topic)"/>
+    <remap from="~goal" to="$(arg goal_topic)"/>
+    <remap from="~yaw" to="$(arg yaw_topic)"/>
+    <remap from="~hover_stop" to="$(arg hover_stop_topic)"/>
+    <remap from="~mandatory_stop" to="$(arg mandatory_stop_topic)"/>
+    <remap from="~takeoff_land" to="$(arg takeoff_land_topic)"/>
+    <remap from="~preview_goal" to="$(arg preview_goal_topic)"/>
+    <remap from="~preview_yaw" to="$(arg preview_yaw_topic)"/>
+    <remap from="~status" to="/vla_bridge/status"/>
+  </node>
+</launch>

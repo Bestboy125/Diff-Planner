@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+
+from setuptools import find_packages, setup
+
+setup(
+    name="vla_diff_bridge",
+    version="0.3.0",
+    packages=find_packages("src"),
+    package_dir={"": "src"},
+)

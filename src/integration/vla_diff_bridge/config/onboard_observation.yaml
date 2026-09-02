@@ -1,0 +1,19 @@
+# Fill these values from the actual camera calibration and TF tree, then set
+# calibration_validated=true. Until then the host intentionally rejects frames.
+backend_url: http://127.0.0.1:8080
+observation_token: REQUIRED
+vehicle_id: uav0
+world_frame: world
+body_frame: base_link
+camera_frame: camera_color_optical_frame
+# The current EKF publisher leaves Odometry.child_frame_id empty. This explicit
+# compatibility switch labels its pose as base_link for the wire contract only.
+# Keep calibration_validated=false until the physical IMU/body/camera chain is
+# measured and confirmed on the aircraft.
+allow_empty_odom_child_frame: true
+calibration_id: REQUIRED
+calibration_validated: false
+image_transport: compressed
+jpeg_quality: 85
+http_timeout_sec: 1.0
+max_pair_age_ms: 80

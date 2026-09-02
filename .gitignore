@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+build/
+devel/
+logs/
+.catkin_tools/
+
+# Private deployment configuration
+.env
+*.local.env
+vla_stack.env
+*.local.yaml
