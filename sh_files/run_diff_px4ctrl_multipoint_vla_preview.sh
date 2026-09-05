@@ -355,7 +355,9 @@ if [[ "${VLA_BRIDGE_MODE}" == 'live' ]]; then
     target_class:=chair \
     depth_backend:="${SEMANTIC_DEPTH_BACKEND:-sgbm}" \
     odom_topic:=/ekf/ekf_odom \
-    world_frame:="${VLA_WORLD_FRAME:-world}"
+    world_frame:="${VLA_WORLD_FRAME:-world}" \
+    body_frame:="${VLA_BODY_FRAME:-base_link}" \
+    allow_empty_odom_child_frame:=true
   wait_for_node /semantic_raw_stereo_node 60
   wait_for_node /semantic_orbit_executor 20
 fi
