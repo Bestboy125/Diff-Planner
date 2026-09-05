@@ -336,8 +336,18 @@ if [[ "${VLA_BRIDGE_MODE}" == 'live' ]]; then
     yaw_topic:=/planning/yaw
   wait_for_node /atomic_skill_executor
 
+  semantic_start_realsense=true
+  if rosnode info /camera/realsense2_camera >/dev/null 2>&1; then
+    semantic_start_realsense=false
+    require_message /camera/infra1/image_rect_raw 5
+    require_message /camera/infra2/image_rect_raw 5
+    require_message /camera/infra1/camera_info 5
+    require_message /camera/infra2/camera_info 5
+  fi
+
   start_launch semantic_orbit \
     semantic_raw_stereo_localizer semantic_d435_raw_stereo_fastlio.launch \
+    start_realsense:="${semantic_start_realsense}" \
     execution_enabled:=false \
     publish_planner_goal:=false \
     auto_publish_stable_goal:=false \
