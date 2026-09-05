@@ -142,6 +142,12 @@ class VlaDiffBridge:
         self.hover_pub = rospy.Publisher("~hover_stop", Empty, queue_size=1)
         self.stop_pub = rospy.Publisher("~mandatory_stop", Empty, queue_size=1)
         self.takeoff_land_pub = rospy.Publisher("~takeoff_land", TakeoffLand, queue_size=1)
+        self.semantic_orbit_pub = rospy.Publisher(
+            "~semantic_orbit_request", String, queue_size=1
+        )
+        self.semantic_orbit_cancel_pub = rospy.Publisher(
+            "~semantic_orbit_cancel", String, queue_size=1
+        )
         self.status_pub = rospy.Publisher("~status", String, queue_size=10, latch=True)
 
         self._lock = threading.RLock()
@@ -338,6 +344,8 @@ class VlaDiffBridge:
             raise ProtocolError("requested takeoff height does not match PX4Ctrl configuration")
         if command.command == "ORBIT_WORLD" and not 0.5 <= command.magnitude <= 5.0:
             raise ProtocolError("operator orbit radius must be within [0.5, 5.0]")
+        if command.command == "SEMANTIC_ORBIT" and abs(command.magnitude - 1.5) > 1e-6:
+            raise ProtocolError("semantic orbit radius must be exactly 1.5 m")
 
         if (command.command == "TAKEOFF" and not self.preview_only_mode
                 and self.live_publish_enabled and self.operator_task_enabled):
@@ -351,6 +359,9 @@ class VlaDiffBridge:
             self._active_chunk = None
             self._active_orbit = None
             self._last_track_monotonic = None
+            self.semantic_orbit_cancel_pub.publish(
+                String(data=json.dumps({"reason": "operator_hold", "task_id": command.task_id}))
+            )
             self.hover_pub.publish(Empty())
             return "accepted", "recoverable hover-stop published"
         if command.command in {"TAKEOFF", "LAND"}:
@@ -369,6 +380,36 @@ class VlaDiffBridge:
         odom = self._require_fresh_odom()
         x, y, z, yaw, _ = odom
         magnitude = command.magnitude
+        if command.command == "SEMANTIC_ORBIT":
+            if self.semantic_orbit_pub.get_num_connections() < 1:
+                raise ProtocolError(
+                    "semantic orbit blocked: onboard semantic-orbit executor is unavailable"
+                )
+            assert command.semantic_target_label is not None
+            assert command.orbit_laps is not None
+            assert command.orbit_direction is not None
+            request = {
+                "task_id": command.task_id,
+                "target_label": command.semantic_target_label,
+                "radius_m": magnitude,
+                "laps": command.orbit_laps,
+                "direction": command.orbit_direction,
+                "yaw_mode": command.orbit_yaw_mode,
+                "keep_current_altitude": command.semantic_keep_current_altitude,
+                "world_frame": command.frame_id,
+                "body_frame": command.body_frame_id,
+                "received_unix_ms": int(time.time() * 1000),
+            }
+            self._active_chunk = None
+            self._active_orbit = None
+            self._last_track_monotonic = None
+            self.semantic_orbit_pub.publish(
+                String(data=json.dumps(request, separators=(",", ":")))
+            )
+            return (
+                "accepted",
+                "semantic target request queued onboard; no takeoff or arming command was issued",
+            )
         if command.command == "ORBIT_WORLD":
             waypoints = self._build_orbit_waypoints(command, odom)
             if self.operator_yaw_hold_pub.get_num_connections() < 1:

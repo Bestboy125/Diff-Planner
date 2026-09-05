@@ -246,6 +246,46 @@ class ProtocolTest(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolError, "magnitude_unit"):
             parse_command(payload)
 
+    def test_accepts_fixed_semantic_orbit_contract(self):
+        payload = valid_operator_payload()
+        payload.update({
+            "command": "SEMANTIC_ORBIT",
+            "magnitude": 1.5,
+            "semantic_orbit": {
+                "target_label": "Chair",
+                "radius_m": 1.5,
+                "laps": 1,
+                "direction": "clockwise",
+                "yaw_mode": "face_center",
+                "keep_current_altitude": True,
+            },
+        })
+        parsed = parse_command(payload)
+        self.assertEqual(parsed.semantic_target_label, "chair")
+        self.assertEqual(parsed.orbit_laps, 1.0)
+        self.assertEqual(parsed.orbit_direction, "clockwise")
+
+    def test_rejects_semantic_orbit_multiword_target_or_mutable_geometry(self):
+        payload = valid_operator_payload()
+        payload.update({
+            "command": "SEMANTIC_ORBIT",
+            "magnitude": 1.5,
+            "semantic_orbit": {
+                "target_label": "red chair",
+                "radius_m": 1.5,
+                "laps": 1,
+                "direction": "clockwise",
+                "yaw_mode": "face_center",
+                "keep_current_altitude": True,
+            },
+        })
+        with self.assertRaisesRegex(ProtocolError, "one English word"):
+            parse_command(payload)
+        payload["semantic_orbit"]["target_label"] = "chair"
+        payload["semantic_orbit"]["radius_m"] = 1.6
+        with self.assertRaisesRegex(ProtocolError, "exactly 1.5"):
+            parse_command(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

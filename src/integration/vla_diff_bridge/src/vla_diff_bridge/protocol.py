@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import math
+import re
 import time
 from typing import Any, Dict, Optional, Sequence, Tuple
 
@@ -32,6 +33,7 @@ OPERATOR_COMMANDS = {
     "YAW_LEFT",
     "YAW_RIGHT",
     "ORBIT_WORLD",
+    "SEMANTIC_ORBIT",
 }
 ACTION_SEMANTIC = ("dx_body", "dy_body", "dz_body", "d_yaw")
 ACTION_UNITS = ("m", "m", "m", "rad")
@@ -67,6 +69,8 @@ class BridgeCommand:
     orbit_laps: Optional[float] = None
     orbit_direction: Optional[str] = None
     orbit_yaw_mode: Optional[str] = None
+    semantic_target_label: Optional[str] = None
+    semantic_keep_current_altitude: Optional[bool] = None
 
 
 def _require_int(payload: Dict[str, Any], key: str, minimum: int = 0) -> int:
@@ -484,6 +488,8 @@ def parse_command(
     orbit_laps = None
     orbit_direction = None
     orbit_yaw_mode = None
+    semantic_target_label = None
+    semantic_keep_current_altitude = None
     if is_preview:
         calibration_id = _nonempty_string(payload, "calibration_id")
         body_frame_id = _nonempty_string(payload, "body_frame_id")
@@ -539,6 +545,36 @@ def parse_command(
             orbit_yaw_mode = orbit.get("yaw_mode", "face_center")
             if orbit_yaw_mode != "face_center":
                 raise ProtocolError("only face_center orbit yaw mode is supported")
+        if command == "SEMANTIC_ORBIT":
+            semantic_orbit = payload.get("semantic_orbit")
+            if not isinstance(semantic_orbit, dict):
+                raise ProtocolError("SEMANTIC_ORBIT requires a semantic_orbit object")
+            semantic_target_label = semantic_orbit.get("target_label")
+            if (
+                not isinstance(semantic_target_label, str)
+                or re.fullmatch(r"[A-Za-z][A-Za-z-]{0,31}", semantic_target_label) is None
+            ):
+                raise ProtocolError("semantic target_label must be one English word")
+            try:
+                semantic_radius = float(semantic_orbit.get("radius_m"))
+                orbit_laps = float(semantic_orbit.get("laps"))
+            except (TypeError, ValueError) as exc:
+                raise ProtocolError("semantic orbit values must be finite numbers") from exc
+            if not math.isfinite(semantic_radius) or abs(semantic_radius - 1.5) > 1e-6:
+                raise ProtocolError("semantic orbit radius must be exactly 1.5 m")
+            if abs(magnitude - semantic_radius) > 1e-6:
+                raise ProtocolError("semantic orbit radius does not match magnitude")
+            if not math.isfinite(orbit_laps) or abs(orbit_laps - 1.0) > 1e-6:
+                raise ProtocolError("semantic orbit laps must be exactly 1")
+            orbit_direction = semantic_orbit.get("direction")
+            if orbit_direction not in {"clockwise", "counterclockwise"}:
+                raise ProtocolError("semantic orbit direction is invalid")
+            orbit_yaw_mode = semantic_orbit.get("yaw_mode")
+            if orbit_yaw_mode != "face_center":
+                raise ProtocolError("semantic orbit must face the target center")
+            semantic_keep_current_altitude = semantic_orbit.get("keep_current_altitude")
+            if semantic_keep_current_altitude is not True:
+                raise ProtocolError("semantic orbit must keep current altitude")
 
     return BridgeCommand(
         mission_id=mission_id,
@@ -565,6 +601,10 @@ def parse_command(
         orbit_laps=orbit_laps,
         orbit_direction=orbit_direction,
         orbit_yaw_mode=orbit_yaw_mode,
+        semantic_target_label=(
+            semantic_target_label.lower() if semantic_target_label is not None else None
+        ),
+        semantic_keep_current_altitude=semantic_keep_current_altitude,
     )
 
 
