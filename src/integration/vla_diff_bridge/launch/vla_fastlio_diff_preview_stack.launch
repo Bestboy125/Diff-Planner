@@ -3,17 +3,28 @@
   <arg name="start_diff_planner_preview" default="false"/>
   <arg name="start_network_bridge" default="false"/>
   <arg name="start_observation_uplink" default="false"/>
+  <arg name="start_usb_camera" default="false"/>
 
   <arg name="drone_id" default="0"/>
   <arg name="odom_topic" default="/ekf/ekf_odom"/>
   <arg name="cloud_topic" default="/laserMapping/cloud_registered"/>
-  <arg name="camera_info_topic" default="/camera/color/camera_info"/>
-  <arg name="image_compressed_topic" default="/camera/color/image_raw/compressed"/>
-  <arg name="image_raw_topic" default="/camera/color/image_raw"/>
+  <arg name="camera_info_topic" default="/vla_usb_camera/camera_info"/>
+  <arg name="image_compressed_topic" default="/vla_usb_camera/image_raw/compressed"/>
+  <arg name="image_raw_topic" default="/vla_usb_camera/image_raw"/>
   <arg name="image_transport" default="compressed"/>
   <arg name="world_frame" default="world"/>
   <arg name="body_frame" default="base_link"/>
-  <arg name="camera_frame" default="camera_color_optical_frame"/>
+  <arg name="camera_frame" default="vla_usb_camera_optical_frame"/>
+  <arg name="action_chunk_sample_count" default="8"/>
+
+  <arg name="usb_video_device"
+       default="/dev/v4l/by-id/usb-KINGSEN_KS2A418-2.0-video-index0"/>
+  <arg name="usb_image_width" default="640"/>
+  <arg name="usb_image_height" default="480"/>
+  <arg name="usb_framerate" default="30"/>
+  <arg name="usb_pixel_format" default="mjpeg"/>
+  <arg name="usb_camera_info_url"
+       default="file://$(env HOME)/.ros/camera_info/head_camera.yaml"/>
 
   <arg name="backend_url" default="http://127.0.0.1:8080"/>
   <arg name="allowed_host_ip" default="127.0.0.1"/>
@@ -21,10 +32,23 @@
   <arg name="observation_token" default="REQUIRED"/>
   <arg name="calibration_id" default="REQUIRED"/>
   <arg name="calibration_validated" default="false"/>
+  <arg name="observation_mode" default="calibrated"/>
 
   <arg name="preview_goal_topic" default="/vla/preview_goal"/>
   <arg name="preview_yaw_topic" default="/vla/preview_yaw"/>
   <arg name="optimized_preview_topic" default="/vla/optimized_trajectory_preview"/>
+
+  <group if="$(arg start_usb_camera)">
+    <include file="$(find vla_diff_bridge)/launch/vla_usb_camera.launch">
+      <arg name="video_device" value="$(arg usb_video_device)"/>
+      <arg name="image_width" value="$(arg usb_image_width)"/>
+      <arg name="image_height" value="$(arg usb_image_height)"/>
+      <arg name="framerate" value="$(arg usb_framerate)"/>
+      <arg name="pixel_format" value="$(arg usb_pixel_format)"/>
+      <arg name="camera_frame" value="$(arg camera_frame)"/>
+      <arg name="camera_info_url" value="$(arg usb_camera_info_url)"/>
+    </include>
+  </group>
 
   <group if="$(arg start_diff_planner_preview)">
     <!-- The unmodified Diff-Planner subscribes to /goal. Scope-local remapping isolates it. -->
@@ -85,6 +109,7 @@
   <group if="$(arg start_network_bridge)">
     <include file="$(find vla_diff_bridge)/launch/vla_diff_bridge.launch">
       <arg name="auth_token" value="$(arg bridge_token)"/>
+      <arg name="action_chunk_sample_count" value="$(arg action_chunk_sample_count)"/>
       <arg name="allowed_host_ip" value="$(arg allowed_host_ip)"/>
       <arg name="live_publish_enabled" value="false"/>
       <arg name="preview_only_mode" value="true"/>
@@ -109,6 +134,7 @@
       <arg name="observation_token" value="$(arg observation_token)"/>
       <arg name="calibration_id" value="$(arg calibration_id)"/>
       <arg name="calibration_validated" value="$(arg calibration_validated)"/>
+      <arg name="observation_mode" value="$(arg observation_mode)"/>
       <arg name="odom_topic" value="$(arg odom_topic)"/>
       <arg name="world_frame" value="$(arg world_frame)"/>
       <arg name="body_frame" value="$(arg body_frame)"/>

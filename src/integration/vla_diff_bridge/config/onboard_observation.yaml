@@ -5,7 +5,7 @@ observation_token: REQUIRED
 vehicle_id: uav0
 world_frame: world
 body_frame: base_link
-camera_frame: camera_color_optical_frame
+camera_frame: vla_usb_camera_optical_frame
 # The current EKF publisher leaves Odometry.child_frame_id empty. This explicit
 # compatibility switch labels its pose as base_link for the wire contract only.
 # Keep calibration_validated=false until the physical IMU/body/camera chain is
@@ -13,6 +13,8 @@ camera_frame: camera_color_optical_frame
 allow_empty_odom_child_frame: true
 calibration_id: REQUIRED
 calibration_validated: false
+# image_odom explicitly omits camera extrinsics, but still requires fresh odometry.
+observation_mode: calibrated
 image_transport: compressed
 jpeg_quality: 85
 http_timeout_sec: 1.0

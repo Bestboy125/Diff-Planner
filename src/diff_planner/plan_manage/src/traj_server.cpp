@@ -5,6 +5,7 @@
 #include <std_msgs/Empty.h>
 #include <visualization_msgs/Marker.h>
 #include <ros/ros.h>
+#include <cmath>
 
 using namespace Eigen;
 
@@ -34,6 +35,24 @@ double YAW_DOT_DOT_MAX_PER_SEC = 5 * M_PI;
 
 bool receive_yaw_ = false;
 ros::Time receive_yaw_time_(0);
+// An operator translation carries an explicit persistent heading, not a 0.5 s
+// yaw hint. Replanning does not clear it; a newer normal yaw command does.
+bool operator_yaw_hold_ = false;
+double operator_yaw_ = 0.0;
+ros::Time last_heading_stamp_(0);
+
+void operatorYawHoldCallback(const quadrotor_msgs::PositionCommandPtr msg)
+{
+  if (!std::isfinite(msg->yaw) || msg->header.stamp.isZero() ||
+      msg->header.stamp < last_heading_stamp_)
+    return;
+  last_heading_stamp_ = msg->header.stamp;
+  operator_yaw_ = std::atan2(std::sin(msg->yaw), std::cos(msg->yaw));
+  last_yaw_ = operator_yaw_;
+  last_yawdot_ = 0.0;
+  operator_yaw_hold_ = true;
+  receive_yaw_ = false;
+}
 
 void heartbeatCallback(std_msgs::EmptyPtr msg)
 {
@@ -42,6 +61,15 @@ void heartbeatCallback(std_msgs::EmptyPtr msg)
 
 void yawCallback(const quadrotor_msgs::PositionCommandPtr msg)
 {
+  if (!std::isfinite(msg->yaw))
+    return;
+  // Do not let an older queued/unstamped yaw hint undo a newer operator hold.
+  if ((operator_yaw_hold_ && msg->header.stamp.isZero()) ||
+      (!msg->header.stamp.isZero() && msg->header.stamp < last_heading_stamp_))
+    return;
+  if (!msg->header.stamp.isZero())
+    last_heading_stamp_ = msg->header.stamp;
+  operator_yaw_hold_ = false;
   receive_yaw_ = true;
   receive_yaw_time_ = ros::Time::now();
   yaw_custom_ = msg->yaw;
@@ -88,6 +116,17 @@ void polyTrajCallback(traj_utils::PolyTrajPtr msg)
 
 std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, double dt)
 {
+  if (operator_yaw_hold_)
+  {
+    last_yaw_ = operator_yaw_;
+    last_yawdot_ = 0.0;
+    return std::make_pair(operator_yaw_, 0.0);
+  }
+  if (!std::isfinite(dt) || dt <= 0.0)
+  {
+    last_yawdot_ = 0.0;
+    return std::make_pair(last_yaw_, 0.0);
+  }
   std::pair<double, double> yaw_yawdot(0, 0);
 
   Eigen::Vector3d dir = t_cur + time_forward_ <= traj_duration_
@@ -150,8 +189,6 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, doub
 
   last_yaw_ = yaw_yawdot.first;
   last_yawdot_ = yaw_yawdot.second;
-
-  yaw_yawdot.second = yaw_temp;
 
   return yaw_yawdot;
 }
@@ -339,6 +376,7 @@ int main(int argc, char **argv)
 
   ros::Subscriber poly_traj_sub = nh.subscribe("planning/trajectory", 10, polyTrajCallback);
   ros::Subscriber yaw_sub = nh.subscribe("/planning/yaw", 10, yawCallback);
+  ros::Subscriber operator_yaw_sub = nh.subscribe("operator_yaw_hold", 10, operatorYawHoldCallback);
   ros::Subscriber heartbeat_sub = nh.subscribe("heartbeat", 10, heartbeatCallback);
   
   pos_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);

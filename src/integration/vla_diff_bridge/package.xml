@@ -10,6 +10,7 @@
   <depend>geometry_msgs</depend>
   <depend>cv_bridge</depend>
   <depend>nav_msgs</depend>
+  <depend>mavros_msgs</depend>
   <depend>quadrotor_msgs</depend>
   <depend>rospy</depend>
   <depend>sensor_msgs</depend>
@@ -17,6 +18,8 @@
   <depend>tf</depend>
   <depend>tf2_ros</depend>
   <exec_depend>diff_planner</exec_depend>
+  <exec_depend>compressed_image_transport</exec_depend>
   <exec_depend>roslaunch</exec_depend>
+  <exec_depend>usb_cam</exec_depend>
   <test_depend>python3-nose</test_depend>
 </package>

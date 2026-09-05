@@ -25,12 +25,15 @@ class ObservationUplink:
         self.vehicle_id = str(rospy.get_param("~vehicle_id", "uav0"))
         self.world_frame = str(rospy.get_param("~world_frame", "world"))
         self.body_frame = str(rospy.get_param("~body_frame", "base_link"))
-        self.camera_frame = str(rospy.get_param("~camera_frame", "camera_color_optical_frame"))
+        self.camera_frame = str(rospy.get_param("~camera_frame", "vla_usb_camera_optical_frame"))
         self.allow_empty_odom_child_frame = bool(
             rospy.get_param("~allow_empty_odom_child_frame", False)
         )
         self.calibration_id = str(rospy.get_param("~calibration_id", "REQUIRED"))
         self.calibration_validated = bool(rospy.get_param("~calibration_validated", False))
+        self.observation_mode = str(rospy.get_param("~observation_mode", "calibrated"))
+        if self.observation_mode not in {"calibrated", "image_odom"}:
+            raise RuntimeError("~observation_mode must be calibrated or image_odom")
         self.image_transport = str(rospy.get_param("~image_transport", "compressed"))
         self.jpeg_quality = int(rospy.get_param("~jpeg_quality", 85))
         self.http_timeout_sec = float(rospy.get_param("~http_timeout_sec", 1.0))
@@ -48,8 +51,11 @@ class ObservationUplink:
         self._sequence = 0
         self._queue: queue.Queue = queue.Queue(maxsize=2)
         self._shutdown = threading.Event()
-        self._tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(5.0))
-        self._tf_listener = tf2_ros.TransformListener(self._tf_buffer)
+        self._tf_buffer = None
+        self._tf_listener = None
+        if self.observation_mode == "calibrated":
+            self._tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(5.0))
+            self._tf_listener = tf2_ros.TransformListener(self._tf_buffer)
         self._status_pub = rospy.Publisher("~status", String, queue_size=10, latch=True)
 
         rospy.Subscriber("~odom", Odometry, self._odom_callback, queue_size=10)
@@ -131,16 +137,22 @@ class ObservationUplink:
             raise RuntimeError("FAST-LIO odometry child frame is empty")
         if image_frame != self.camera_frame or camera.header.frame_id != self.camera_frame:
             raise RuntimeError("camera optical frame contract mismatch")
-        try:
-            transform = self._tf_buffer.lookup_transform(
-                self.body_frame, self.camera_frame, stamp, rospy.Duration(0.03)
-            )
-        except Exception as exc:
-            raise RuntimeError("body<-camera TF unavailable: {}".format(exc))
+        body_from_camera = None
+        if self.observation_mode == "calibrated":
+            try:
+                transform = self._tf_buffer.lookup_transform(
+                    self.body_frame, self.camera_frame, stamp, rospy.Duration(0.03)
+                )
+            except Exception as exc:
+                raise RuntimeError("body<-camera TF unavailable: {}".format(exc))
+            body_from_camera = {
+                "parent_frame_id": self.body_frame,
+                "child_frame_id": self.camera_frame,
+                "translation": self._xyz(transform.transform.translation),
+                "rotation": self._xyzw(transform.transform.rotation),
+            }
         pose = odom.pose.pose
         twist = odom.twist.twist
-        translation = transform.transform.translation
-        rotation = transform.transform.rotation
         payload: Dict[str, Any] = {
             "schema_version": 1,
             "type": "onboard_observation",
@@ -170,14 +182,10 @@ class ObservationUplink:
                 "k": list(camera.K),
                 "d": list(camera.D),
             },
-            "body_from_camera": {
-                "parent_frame_id": self.body_frame,
-                "child_frame_id": self.camera_frame,
-                "translation": self._xyz(translation),
-                "rotation": self._xyzw(rotation),
-            },
+            "observation_mode": self.observation_mode,
+            "body_from_camera": body_from_camera,
             "calibration_id": self.calibration_id,
-            "calibration_validated": self.calibration_validated,
+            "calibration_validated": self.calibration_validated and self.observation_mode == "calibrated",
         }
         if planner_preview is not None:
             payload["planner_preview"] = {
@@ -273,7 +281,7 @@ class ObservationUplink:
 
     def _publish_status(self, status: str, detail: str) -> None:
         self._status_pub.publish(
-            String(data=json.dumps({"status": status, "detail": detail, "time_unix_ms": int(time.time() * 1000)}))
+            String(data=json.dumps({"status": status, "detail": detail, "observation_mode": self.observation_mode, "time_unix_ms": int(time.time() * 1000)}))
         )
 
     def shutdown(self) -> None:

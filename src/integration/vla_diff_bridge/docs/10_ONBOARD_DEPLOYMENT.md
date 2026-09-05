@@ -24,9 +24,10 @@
 - 实机 traj_server 输出：`run_exp_single_lio.launch` 将 `position_cmd` 映射到
   `/setpoints_cmd`。本包预览实例不使用该 launch，并将自己的输出隔离到
   `/vla/optimized_trajectory_preview`。
-- RealSense 默认彩色话题：`/camera/color/image_raw`、
-  `/camera/color/image_raw/compressed` 和 `/camera/color/camera_info`；实际消息频率、
-  CameraInfo 与 TF 仍须在后续只读传感器检查中确认。
+- VLA 默认视觉输入已切换为 KINGSEN KS2A418-2.0 单目 USB 相机，稳定设备路径为
+  `/dev/v4l/by-id/usb-KINGSEN_KS2A418-2.0-video-index0`。默认话题为
+  `/vla_usb_camera/image_raw`、`/vla_usb_camera/image_raw/compressed` 和
+  `/vla_usb_camera/camera_info`，光学 frame 为 `vla_usb_camera_optical_frame`。
 
 ## 本轮细化
 
@@ -63,5 +64,7 @@ Python 单元测试、语法编译、launch XML 检查和禁用话题扫描，�
 
 飞机保持未解锁状态时，可由操作员单独启动传感器/定位链，再只读记录：实际图像与
 CameraInfo frame、K/D、图像频率、`world -> base_link` 语义、
-`base_link -> camera_color_optical_frame` TF 和各消息时间差。确认后生成固定
-calibration ID；在此之前不得把 `calibration_validated` 改为 true。
+`base_link -> vla_usb_camera_optical_frame` TF 和各消息时间差。机载现有
+`/home/nv/.ros/camera_info/head_camera.yaml` 的分辨率是 640×480，但仍需确认其对应当前
+KS2A418 相机。确认内参、安装外参和 optical frame 方向后生成新的 calibration ID；旧
+D435 ID 不得复用，在此之前不得把 `calibration_validated` 改为 true。

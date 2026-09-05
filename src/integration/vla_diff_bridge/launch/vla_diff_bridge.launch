@@ -9,9 +9,11 @@
   <arg name="odom_topic" default="/ekf/ekf_odom"/>
   <arg name="world_frame" default="world"/>
   <arg name="body_frame" default="base_link"/>
-  <arg name="camera_frame" default="camera_color_optical_frame"/>
+  <arg name="camera_frame" default="vla_usb_camera_optical_frame"/>
+  <arg name="action_chunk_sample_count" default="8"/>
   <arg name="goal_topic" default="/goal"/>
   <arg name="yaw_topic" default="/planning/yaw"/>
+  <arg name="operator_yaw_hold_topic" default="/drone_0_traj_server/operator_yaw_hold"/>
   <arg name="hover_stop_topic" default="/vla_hover_stop_to_planner"/>
   <arg name="mandatory_stop_topic" default="/mandatory_stop_to_planner"/>
   <arg name="takeoff_land_topic" default="/px4ctrl/takeoff_land"/>
@@ -29,10 +31,13 @@
     <param name="world_frame" value="$(arg world_frame)"/>
     <param name="body_frame" value="$(arg body_frame)"/>
     <param name="camera_frame" value="$(arg camera_frame)"/>
+    <param name="action_chunk_sample_count" value="$(arg action_chunk_sample_count)" type="int"/>
     <rosparam param="allowed_host_ips" subst_value="true">["$(arg allowed_host_ip)"]</rosparam>
     <remap from="~odom" to="$(arg odom_topic)"/>
+    <remap from="~fcu_state" to="/mavros/state"/>
     <remap from="~goal" to="$(arg goal_topic)"/>
     <remap from="~yaw" to="$(arg yaw_topic)"/>
+    <remap from="~operator_yaw_hold" to="$(arg operator_yaw_hold_topic)"/>
     <remap from="~hover_stop" to="$(arg hover_stop_topic)"/>
     <remap from="~mandatory_stop" to="$(arg mandatory_stop_topic)"/>
     <remap from="~takeoff_land" to="$(arg takeoff_land_topic)"/>

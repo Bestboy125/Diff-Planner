@@ -9,7 +9,8 @@ set -Eeuo pipefail
 #   - ROS master and MAVROS telemetry
 #   - FAST-LIO and EKF (/ekf/ekf_odom)
 #   - registered point cloud (/laserMapping/cloud_registered)
-#   - RealSense color stream and CameraInfo
+#   - The KINGSEN monocular USB camera is connected. This launcher starts it by
+#     default; set VLA_START_USB_CAMERA=0 only when a compatible driver is already running.
 #   - Windows VLA backend
 #
 # VLA_BRIDGE_MODE defaults to preview. Selecting live additionally requires
@@ -46,7 +47,9 @@ cleanup() {
   fi
 }
 
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
@@ -58,6 +61,16 @@ require_message() {
   if ! timeout "${timeout_sec}" rostopic echo -n 1 "${topic}" >/dev/null 2>&1; then
     fail "required live topic unavailable: ${topic}"
   fi
+}
+
+require_topic_frame() {
+  local topic="$1"
+  local expected_frame="$2"
+  local message actual_frame
+  message="$(timeout 5 rostopic echo -n 1 "${topic}" 2>/dev/null || true)"
+  actual_frame="$(sed -n 's/^[[:space:]]*frame_id:[[:space:]]*//p' <<<"${message}" | tr -d "\"'" | head -n 1)"
+  [[ "${actual_frame}" == "${expected_frame}" ]] || \
+    fail "topic ${topic} frame_id=${actual_frame:-missing}; expected ${expected_frame}"
 }
 
 require_node_absent() {
@@ -152,6 +165,15 @@ if [[ "${VLA_BRIDGE_MODE}" == 'live' ]]; then
     fail 'live bridge requires ENABLE_VLA_LIVE_CONTROL=I_ACCEPT_VLA_AND_OPERATOR_GOAL_PUBLICATION'
 fi
 
+readonly VLA_START_USB_CAMERA="${VLA_START_USB_CAMERA:-1}"
+readonly VLA_USB_VIDEO_DEVICE="${VLA_USB_VIDEO_DEVICE:-/dev/v4l/by-id/usb-KINGSEN_KS2A418-2.0-video-index0}"
+readonly VLA_USB_CAMERA_INFO_URL="${VLA_USB_CAMERA_INFO_URL:-file://${HOME}/.ros/camera_info/head_camera.yaml}"
+readonly VLA_CAMERA_INFO_TOPIC="${VLA_CAMERA_INFO_TOPIC:-/vla_usb_camera/camera_info}"
+readonly VLA_IMAGE_COMPRESSED_TOPIC="${VLA_IMAGE_COMPRESSED_TOPIC:-/vla_usb_camera/image_raw/compressed}"
+readonly VLA_IMAGE_RAW_TOPIC="${VLA_IMAGE_RAW_TOPIC:-/vla_usb_camera/image_raw}"
+readonly VLA_CAMERA_FRAME="${VLA_CAMERA_FRAME:-vla_usb_camera_optical_frame}"
+[[ "${VLA_START_USB_CAMERA}" =~ ^[01]$ ]] || fail 'VLA_START_USB_CAMERA must be 0 or 1'
+
 readonly MULTIPOINT_START_PLAN="${MULTIPOINT_START_PLAN:-0}"
 readonly MULTIPOINT_BACK_PLAN="${MULTIPOINT_BACK_PLAN:-0}"
 readonly MULTIPOINT_AUTO_PLANNING="${MULTIPOINT_AUTO_PLANNING:-0}"
@@ -199,10 +221,31 @@ readonly MAVROS_STATE="$(timeout 5 rostopic echo -n 1 /mavros/state 2>/dev/null 
 grep -q '^connected: True$' <<<"${MAVROS_STATE}" || fail 'MAVROS is not connected'
 grep -q '^armed: False$' <<<"${MAVROS_STATE}" || fail 'vehicle must be disarmed before startup'
 
+if [[ "${VLA_START_USB_CAMERA}" == '1' ]]; then
+  [[ -r "${VLA_USB_VIDEO_DEVICE}" ]] || fail "USB camera is unavailable: ${VLA_USB_VIDEO_DEVICE}"
+  if [[ "${VLA_USB_CAMERA_INFO_URL}" == file://* ]]; then
+    [[ -r "${VLA_USB_CAMERA_INFO_URL#file://}" ]] || \
+      fail "USB camera calibration file is unavailable: ${VLA_USB_CAMERA_INFO_URL#file://}"
+  fi
+  require_node_absent /vla_usb_camera
+  start_launch vla_usb_camera \
+    vla_diff_bridge vla_usb_camera.launch \
+    video_device:="${VLA_USB_VIDEO_DEVICE}" \
+    image_width:="${VLA_USB_IMAGE_WIDTH:-640}" \
+    image_height:="${VLA_USB_IMAGE_HEIGHT:-480}" \
+    framerate:="${VLA_USB_FRAMERATE:-30}" \
+    pixel_format:="${VLA_USB_PIXEL_FORMAT:-mjpeg}" \
+    camera_frame:="${VLA_CAMERA_FRAME}" \
+    camera_info_url:="${VLA_USB_CAMERA_INFO_URL}"
+  wait_for_node /vla_usb_camera
+fi
+
 require_message /ekf/ekf_odom 5
 require_message /laserMapping/cloud_registered 5
-require_message "${VLA_CAMERA_INFO_TOPIC:-/camera/color/camera_info}" 5
-require_message "${VLA_IMAGE_COMPRESSED_TOPIC:-/camera/color/image_raw/compressed}" 5
+require_message "${VLA_CAMERA_INFO_TOPIC}" 5
+require_message "${VLA_IMAGE_COMPRESSED_TOPIC}" 5
+require_topic_frame "${VLA_CAMERA_INFO_TOPIC}" "${VLA_CAMERA_FRAME}"
+require_topic_frame "${VLA_IMAGE_COMPRESSED_TOPIC}" "${VLA_CAMERA_FRAME}"
 
 curl --fail --silent --show-error --max-time 3 \
   "${VLA_BACKEND_URL%/}/api/missions/current" >/dev/null || \
@@ -218,6 +261,7 @@ if [[ "${VLA_BRIDGE_MODE}" == 'preview' ]]; then
   start_launch vla_preview \
     vla_diff_bridge vla_fastlio_diff_preview_stack.launch \
     start_diff_planner_preview:=false \
+    action_chunk_sample_count:="${VLA_ACTION_CHUNK_SAMPLE_COUNT:-8}" \
     start_network_bridge:=true \
     start_observation_uplink:=true \
     backend_url:="${VLA_BACKEND_URL}" \
@@ -226,19 +270,21 @@ if [[ "${VLA_BRIDGE_MODE}" == 'preview' ]]; then
     observation_token:="${VLA_OBSERVATION_TOKEN}" \
     calibration_id:="${VLA_CALIBRATION_ID}" \
     calibration_validated:=true \
+    observation_mode:="${VLA_OBSERVATION_MODE:-calibrated}" \
     odom_topic:=/ekf/ekf_odom \
     cloud_topic:=/laserMapping/cloud_registered \
-    camera_info_topic:="${VLA_CAMERA_INFO_TOPIC:-/camera/color/camera_info}" \
-    image_compressed_topic:="${VLA_IMAGE_COMPRESSED_TOPIC:-/camera/color/image_raw/compressed}" \
-    image_raw_topic:="${VLA_IMAGE_RAW_TOPIC:-/camera/color/image_raw}" \
+    camera_info_topic:="${VLA_CAMERA_INFO_TOPIC}" \
+    image_compressed_topic:="${VLA_IMAGE_COMPRESSED_TOPIC}" \
+    image_raw_topic:="${VLA_IMAGE_RAW_TOPIC}" \
     image_transport:="${VLA_IMAGE_TRANSPORT:-compressed}" \
     world_frame:="${VLA_WORLD_FRAME:-world}" \
     body_frame:="${VLA_BODY_FRAME:-base_link}" \
-    camera_frame:="${VLA_CAMERA_FRAME:-camera_color_optical_frame}"
+    camera_frame:="${VLA_CAMERA_FRAME}"
 else
   start_launch vla_control_bridge \
     vla_diff_bridge vla_diff_bridge.launch \
     auth_token:="${VLA_BRIDGE_TOKEN}" \
+    action_chunk_sample_count:="${VLA_ACTION_CHUNK_SAMPLE_COUNT:-8}" \
     allowed_host_ip:="${VLA_HOST_IP}" \
     live_publish_enabled:=true \
     preview_only_mode:=false \
@@ -248,7 +294,7 @@ else
     odom_topic:=/ekf/ekf_odom \
     world_frame:="${VLA_WORLD_FRAME:-world}" \
     body_frame:="${VLA_BODY_FRAME:-base_link}" \
-    camera_frame:="${VLA_CAMERA_FRAME:-camera_color_optical_frame}" \
+    camera_frame:="${VLA_CAMERA_FRAME}" \
     goal_topic:=/goal \
     yaw_topic:=/planning/yaw \
     takeoff_land_topic:=/px4ctrl/takeoff_land
@@ -259,24 +305,39 @@ else
     observation_token:="${VLA_OBSERVATION_TOKEN}" \
     calibration_id:="${VLA_CALIBRATION_ID}" \
     calibration_validated:=true \
+    observation_mode:="${VLA_OBSERVATION_MODE:-calibrated}" \
     odom_topic:=/ekf/ekf_odom \
-    camera_info_topic:="${VLA_CAMERA_INFO_TOPIC:-/camera/color/camera_info}" \
-    image_compressed_topic:="${VLA_IMAGE_COMPRESSED_TOPIC:-/camera/color/image_raw/compressed}" \
-    image_raw_topic:="${VLA_IMAGE_RAW_TOPIC:-/camera/color/image_raw}" \
+    camera_info_topic:="${VLA_CAMERA_INFO_TOPIC}" \
+    image_compressed_topic:="${VLA_IMAGE_COMPRESSED_TOPIC}" \
+    image_raw_topic:="${VLA_IMAGE_RAW_TOPIC}" \
     image_transport:="${VLA_IMAGE_TRANSPORT:-compressed}" \
     world_frame:="${VLA_WORLD_FRAME:-world}" \
     body_frame:="${VLA_BODY_FRAME:-base_link}" \
-    camera_frame:="${VLA_CAMERA_FRAME:-camera_color_optical_frame}"
+    camera_frame:="${VLA_CAMERA_FRAME}"
 fi
 
 wait_for_node /vla_diff_bridge
 wait_for_node /onboard_observation_uplink
 
-start_launch diff_planner diff_planner run_exp_single_lio.launch
+start_launch diff_planner diff_planner run_exp_single_lio.launch traj_server_executable:=traj_server_heading_hold
 wait_for_node /drone_0_traj_server
 
-start_launch px4ctrl px4ctrl run_ctrl_lio.launch
+start_launch px4ctrl vla_diff_bridge px4ctrl_vla.launch
 wait_for_node /px4ctrl
+
+# Readback only: never change parameters underneath a running controller.
+python3 - <<'PY'
+import rospy
+if rospy.get_param('/px4ctrl/auto_takeoff_land/enable_auto_arm') is not True:
+    raise SystemExit('this operator-approved launch requires auto-arm on TAKEOFF')
+if rospy.get_param('/px4ctrl/auto_takeoff_land/no_RC') is not False:
+    raise SystemExit('no_RC must be false')
+height = float(rospy.get_param('/px4ctrl/auto_takeoff_land/takeoff_height'))
+if not abs(height - 0.8) < 1e-6:
+    raise SystemExit('PX4Ctrl takeoff height must be 0.8 m')
+if not abs(float(rospy.get_param('/vla_diff_bridge/takeoff_height_m')) - height) < 1e-6:
+    raise SystemExit('bridge/PX4Ctrl height mismatch')
+PY
 
 readonly MULTIPOINT_YAML_PATH="$(rospack find multipoint)/config/points.yaml"
 start_process multipoint \

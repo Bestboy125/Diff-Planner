@@ -31,6 +31,7 @@ OPERATOR_COMMANDS = {
     "MOVE_DOWN",
     "YAW_LEFT",
     "YAW_RIGHT",
+    "ORBIT_WORLD",
 }
 ACTION_SEMANTIC = ("dx_body", "dy_body", "dz_body", "d_yaw")
 ACTION_UNITS = ("m", "m", "m", "rad")
@@ -51,6 +52,7 @@ class BridgeCommand:
     frame_id: str
     action_local_delta: Optional[Tuple[float, float, float, float]]
     target_mission: Optional[Tuple[float, float, float, float]]
+    action_chunk: Optional[Tuple[Tuple[float, float, float, float], ...]] = None
     calibration_id: Optional[str] = None
     body_frame_id: Optional[str] = None
     camera_frame_id: Optional[str] = None
@@ -61,6 +63,10 @@ class BridgeCommand:
     task_id: Optional[str] = None
     magnitude: Optional[float] = None
     magnitude_unit: Optional[str] = None
+    orbit_center: Optional[Tuple[float, float, float]] = None
+    orbit_laps: Optional[float] = None
+    orbit_direction: Optional[str] = None
+    orbit_yaw_mode: Optional[str] = None
 
 
 def _require_int(payload: Dict[str, Any], key: str, minimum: int = 0) -> int:
@@ -87,11 +93,307 @@ def _vector4(value: Any, key: str) -> Tuple[float, float, float, float]:
     return result  # type: ignore[return-value]
 
 
+def _action_chunk(
+    value: Any, key: str, max_steps: int
+) -> Tuple[Tuple[float, float, float, float], ...]:
+    if (
+        not isinstance(value, Sequence)
+        or isinstance(value, (str, bytes))
+        or not 1 <= len(value) <= max_steps
+    ):
+        raise ProtocolError("{} must have shape [1..{}, 4]".format(key, max_steps))
+    rows = []
+    for row in value:
+        if not isinstance(row, Sequence) or isinstance(row, (str, bytes)) or len(row) != 4:
+            raise ProtocolError("{} must have shape [1..{}, 4]".format(key, max_steps))
+        try:
+            normalized = tuple(float(item) for item in row)
+        except (TypeError, ValueError) as exc:
+            raise ProtocolError("{} must contain numbers".format(key)) from exc
+        if not all(math.isfinite(item) for item in normalized):
+            raise ProtocolError("{} must contain only finite numbers".format(key))
+        rows.append(normalized)
+    return tuple(rows)  # type: ignore[return-value]
+
+
+@dataclass(frozen=True)
+class LookAheadResult:
+    target: Optional[Tuple[float, float, float, float]]
+    selected_index: Optional[int]
+    skipped_count: int
+    reason: str
+    path_progress_m: float
+    cross_track_error_m: float
+    selected_sample_index: Optional[int] = None
+    sampled_count: int = 0
+
+
+@dataclass(frozen=True)
+class ActionChunkPlan:
+    """A fixed world-frame action chunk plus selected Diff-Planner waypoints."""
+
+    capture_pose: Tuple[float, float, float, float]
+    waypoints: Tuple[Tuple[float, float, float, float], ...]
+    sampled_indices: Tuple[int, ...]
+
+    @property
+    def sampled_waypoints(self) -> Tuple[Tuple[float, float, float, float], ...]:
+        return tuple(self.waypoints[index] for index in self.sampled_indices)
+
+
+def _wrap_yaw(yaw: float) -> float:
+    return math.atan2(math.sin(yaw), math.cos(yaw))
+
+
+def _capture_pose_from_first_target(
+    first_action: Tuple[float, float, float, float],
+    first_target: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    dx_body, dy_body, dz_body, d_yaw = first_action
+    capture_yaw = _wrap_yaw(first_target[3] - d_yaw)
+    dx_world = math.cos(capture_yaw) * dx_body - math.sin(capture_yaw) * dy_body
+    dy_world = math.sin(capture_yaw) * dx_body + math.cos(capture_yaw) * dy_body
+    return (
+        first_target[0] - dx_world,
+        first_target[1] - dy_world,
+        first_target[2] - dz_body,
+        capture_yaw,
+    )
+
+
+def integrate_action_chunk(
+    first_action: Tuple[float, float, float, float],
+    first_target: Tuple[float, float, float, float],
+    action_chunk: Tuple[Tuple[float, float, float, float], ...],
+) -> Tuple[
+    Tuple[float, float, float, float],
+    Tuple[Tuple[float, float, float, float], ...],
+]:
+    """Recover the capture pose and integrate body deltas in a fixed world frame."""
+    pose = _capture_pose_from_first_target(first_action, first_target)
+    capture_pose = pose
+    targets = []
+    for dx_body, dy_body, dz_body, d_yaw in action_chunk:
+        x, y, z, yaw = pose
+        target = (
+            x + math.cos(yaw) * dx_body - math.sin(yaw) * dy_body,
+            y + math.sin(yaw) * dx_body + math.cos(yaw) * dy_body,
+            z + dz_body,
+            _wrap_yaw(yaw + d_yaw),
+        )
+        targets.append(target)
+        pose = target
+    return capture_pose, tuple(targets)
+
+
+def _path_geometry(
+    capture_pose: Tuple[float, float, float, float],
+    waypoints: Tuple[Tuple[float, float, float, float], ...],
+) -> Tuple[
+    Tuple[Tuple[float, float, float], ...],
+    Tuple[float, ...],
+    Tuple[Tuple[Tuple[float, float, float], float], ...],
+]:
+    points = (capture_pose[:3],) + tuple(target[:3] for target in waypoints)
+    cumulative = [0.0]
+    segments = []
+    for start, end in zip(points, points[1:]):
+        vector = tuple(end[index] - start[index] for index in range(3))
+        length = math.sqrt(sum(component * component for component in vector))
+        cumulative.append(cumulative[-1] + length)
+        segments.append((vector, length))
+    return points, tuple(cumulative), tuple(segments)
+
+
+def _sample_waypoint_indices(
+    capture_pose: Tuple[float, float, float, float],
+    waypoints: Tuple[Tuple[float, float, float, float], ...],
+    sample_count: int,
+) -> Tuple[int, ...]:
+    """Choose exactly sample_count original waypoints, preserving endpoints/order."""
+    if sample_count < 1:
+        raise ProtocolError("action_chunk_sample_count must be >= 1")
+    waypoint_count = len(waypoints)
+    if waypoint_count <= sample_count:
+        return tuple(range(waypoint_count))
+    _, cumulative, _ = _path_geometry(capture_pose, waypoints)
+    total_distance = cumulative[-1]
+    selected = []
+    previous = -1
+    for sample_index in range(sample_count):
+        if sample_index == 0:
+            selected_index = 0
+        elif sample_index == sample_count - 1:
+            selected_index = waypoint_count - 1
+        else:
+            minimum = previous + 1
+            maximum = waypoint_count - sample_count + sample_index
+            if total_distance <= 1e-9:
+                desired_index = round(
+                    sample_index * (waypoint_count - 1) / (sample_count - 1)
+                )
+                selected_index = max(minimum, min(maximum, desired_index))
+            else:
+                desired_progress = total_distance * sample_index / (sample_count - 1)
+                selected_index = min(
+                    range(minimum, maximum + 1),
+                    key=lambda index: abs(cumulative[index + 1] - desired_progress),
+                )
+        selected.append(selected_index)
+        previous = selected_index
+    return tuple(selected)
+
+
+def build_action_chunk_plan(
+    first_action: Tuple[float, float, float, float],
+    first_target: Tuple[float, float, float, float],
+    action_chunk: Tuple[Tuple[float, float, float, float], ...],
+    sample_count: int,
+) -> ActionChunkPlan:
+    """Integrate all model steps, then retain 6/8 original waypoints for execution."""
+    if not action_chunk:
+        raise ProtocolError("action chunk must not be empty")
+    capture_pose, waypoints = integrate_action_chunk(first_action, first_target, action_chunk)
+    return ActionChunkPlan(
+        capture_pose=capture_pose,
+        waypoints=waypoints,
+        sampled_indices=_sample_waypoint_indices(capture_pose, waypoints, sample_count),
+    )
+
+
+def select_action_chunk_plan_target(
+    plan: ActionChunkPlan,
+    current_pose: Tuple[float, float, float, float],
+    lookahead_distance_m: float,
+    max_cross_track_m: float,
+) -> LookAheadResult:
+    """Project on the full path, prune stale samples, and select the next sample."""
+    current_position = current_pose[:3]
+    points, cumulative, segments = _path_geometry(plan.capture_pose, plan.waypoints)
+
+    if cumulative[-1] <= 1e-9:
+        error = math.dist(current_position, plan.capture_pose[:3])
+        if error > max_cross_track_m:
+            return LookAheadResult(None, None, 0,
+                                   "current pose is outside the action-chunk corridor",
+                                   0.0, error, None, len(plan.sampled_indices))
+        first_sample = plan.sampled_indices[0]
+        return LookAheadResult(
+            target=(current_pose[0], current_pose[1], current_pose[2], plan.waypoints[first_sample][3]),
+            selected_index=first_sample,
+            skipped_count=0,
+            reason="in_place_chunk",
+            path_progress_m=0.0,
+            cross_track_error_m=math.dist(current_position, plan.capture_pose[:3]),
+            selected_sample_index=0,
+            sampled_count=len(plan.sampled_indices),
+        )
+
+    best_error = float("inf")
+    best_progress = 0.0
+    for index, ((vector, length), start) in enumerate(zip(segments, points)):
+        if length <= 1e-9:
+            continue
+        offset = tuple(current_position[axis] - start[axis] for axis in range(3))
+        dot = sum(offset[axis] * vector[axis] for axis in range(3))
+        ratio = max(0.0, min(1.0, dot / (length * length)))
+        projected = tuple(start[axis] + ratio * vector[axis] for axis in range(3))
+        error = math.dist(current_position, projected)
+        progress = cumulative[index] + ratio * length
+        if error < best_error - 1e-9 or (
+            abs(error - best_error) <= 1e-9 and progress > best_progress
+        ):
+            best_error = error
+            best_progress = progress
+
+    if best_error > max_cross_track_m:
+        return LookAheadResult(
+            target=None,
+            selected_index=None,
+            skipped_count=0,
+            reason="current pose is outside the action-chunk corridor",
+            path_progress_m=best_progress,
+            cross_track_error_m=best_error,
+            selected_sample_index=None,
+            sampled_count=len(plan.sampled_indices),
+        )
+
+    if best_progress >= cumulative[-1] - 1e-9:
+        return LookAheadResult(
+            None, None, len(plan.sampled_indices),
+            "all sampled action-chunk waypoints were already traversed",
+            best_progress, best_error, None, len(plan.sampled_indices),
+        )
+    desired_progress = best_progress + lookahead_distance_m
+    selected_sample_index = next(
+        (
+            sample_index
+            for sample_index, waypoint_index in enumerate(plan.sampled_indices)
+            if cumulative[waypoint_index + 1] + 1e-9 >= desired_progress
+        ),
+        None,
+    )
+    if selected_sample_index is None:
+        if best_progress >= cumulative[-1] - 1e-9:
+            return LookAheadResult(
+                target=None,
+                selected_index=None,
+                skipped_count=len(plan.sampled_indices),
+                reason="all sampled action-chunk waypoints were already traversed",
+                path_progress_m=best_progress,
+                cross_track_error_m=best_error,
+                selected_sample_index=None,
+                sampled_count=len(plan.sampled_indices),
+            )
+        selected_sample_index = len(plan.sampled_indices) - 1
+
+    selected_index = plan.sampled_indices[selected_sample_index]
+    return LookAheadResult(
+        target=plan.waypoints[selected_index],
+        selected_index=selected_index,
+        skipped_count=selected_sample_index,
+        reason="selected sampled waypoint {}/{} from source step {}/{}".format(
+            selected_sample_index + 1,
+            len(plan.sampled_indices),
+            selected_index + 1,
+            len(plan.waypoints),
+        ),
+        path_progress_m=best_progress,
+        cross_track_error_m=best_error,
+        selected_sample_index=selected_sample_index,
+        sampled_count=len(plan.sampled_indices),
+    )
+
+
+def select_action_chunk_target(
+    first_action: Tuple[float, float, float, float],
+    first_target: Tuple[float, float, float, float],
+    action_chunk: Tuple[Tuple[float, float, float, float], ...],
+    current_pose: Tuple[float, float, float, float],
+    lookahead_distance_m: float,
+    max_cross_track_m: float,
+) -> LookAheadResult:
+    """Drop world-frame waypoints already traversed while cloud inference ran."""
+    plan = build_action_chunk_plan(
+        first_action,
+        first_target,
+        action_chunk,
+        sample_count=len(action_chunk),
+    )
+    return select_action_chunk_plan_target(
+        plan,
+        current_pose,
+        lookahead_distance_m,
+        max_cross_track_m,
+    )
+
+
 def parse_command(
     payload: Any,
     now_unix_ms: Optional[int] = None,
     max_ttl_ms: int = 2000,
     future_tolerance_ms: int = 1000,
+    max_action_chunk_steps: int = 10,
 ) -> BridgeCommand:
     """Validate and normalize one command from the ground-station backend."""
     if not isinstance(payload, dict):
@@ -157,8 +459,18 @@ def parse_command(
         action = _vector4(payload["action_local_delta"], "action_local_delta")
     if payload.get("target_mission") is not None:
         target = _vector4(payload["target_mission"], "target_mission")
+    action_chunk = None
+    if payload.get("action_chunk") is not None and command in {TRACK, PLAN_PREVIEW}:
+        action_chunk = _action_chunk(
+            payload["action_chunk"], "action_chunk", max_action_chunk_steps
+        )
     if command in {TRACK, PLAN_PREVIEW} and (action is None or target is None):
         raise ProtocolError("TRACK and PLAN_PREVIEW require action_local_delta and target_mission")
+    if action_chunk is not None:
+        if action is None or any(
+            abs(action[index] - action_chunk[0][index]) > 1e-6 for index in range(4)
+        ):
+            raise ProtocolError("action_chunk first row must match action_local_delta")
 
     calibration_id = None
     body_frame_id = None
@@ -168,6 +480,10 @@ def parse_command(
     source_capture_unix_ms = None
     magnitude = None
     magnitude_unit = None
+    orbit_center = None
+    orbit_laps = None
+    orbit_direction = None
+    orbit_yaw_mode = None
     if is_preview:
         calibration_id = _nonempty_string(payload, "calibration_id")
         body_frame_id = _nonempty_string(payload, "body_frame_id")
@@ -199,6 +515,30 @@ def parse_command(
             raise ProtocolError("magnitude_unit does not match operator command")
         if command in {"HOLD", "LAND"} and magnitude != 0.0:
             raise ProtocolError("HOLD and LAND require zero magnitude")
+        if command == "ORBIT_WORLD":
+            orbit = payload.get("orbit")
+            if not isinstance(orbit, dict):
+                raise ProtocolError("ORBIT_WORLD requires an orbit object")
+            center = orbit.get("center")
+            if not isinstance(center, Sequence) or isinstance(center, (str, bytes)) or len(center) != 3:
+                raise ProtocolError("orbit.center must have shape [3]")
+            try:
+                orbit_center = tuple(float(item) for item in center)
+                orbit_laps = float(orbit.get("laps"))
+            except (TypeError, ValueError) as exc:
+                raise ProtocolError("orbit values must be finite numbers") from exc
+            if not all(math.isfinite(item) for item in orbit_center) or not math.isfinite(orbit_laps):
+                raise ProtocolError("orbit values must be finite numbers")
+            if abs(float(orbit.get("radius_m", magnitude)) - magnitude) > 1e-6:
+                raise ProtocolError("orbit radius does not match magnitude")
+            if not 0.25 <= orbit_laps <= 3.0:
+                raise ProtocolError("orbit.laps must be within [0.25, 3.0]")
+            orbit_direction = orbit.get("direction")
+            if orbit_direction not in {"clockwise", "counterclockwise"}:
+                raise ProtocolError("orbit.direction is invalid")
+            orbit_yaw_mode = orbit.get("yaw_mode", "face_center")
+            if orbit_yaw_mode != "face_center":
+                raise ProtocolError("only face_center orbit yaw mode is supported")
 
     return BridgeCommand(
         mission_id=mission_id,
@@ -210,6 +550,7 @@ def parse_command(
         frame_id=frame_id,
         action_local_delta=action,
         target_mission=target,
+        action_chunk=action_chunk,
         calibration_id=calibration_id,
         body_frame_id=body_frame_id,
         camera_frame_id=camera_frame_id,
@@ -220,6 +561,10 @@ def parse_command(
         task_id=identifier if is_operator else None,
         magnitude=magnitude,
         magnitude_unit=magnitude_unit,
+        orbit_center=orbit_center,
+        orbit_laps=orbit_laps,
+        orbit_direction=orbit_direction,
+        orbit_yaw_mode=orbit_yaw_mode,
     )
 
 

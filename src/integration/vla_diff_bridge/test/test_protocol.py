@@ -7,7 +7,14 @@ import unittest
 PACKAGE_SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(PACKAGE_SRC))
 
-from vla_diff_bridge.protocol import ProtocolError, parse_command  # noqa: E402
+from vla_diff_bridge.protocol import (  # noqa: E402
+    ProtocolError,
+    build_action_chunk_plan,
+    integrate_action_chunk,
+    parse_command,
+    select_action_chunk_target,
+    select_action_chunk_plan_target,
+)
 
 
 def valid_payload():
@@ -26,6 +33,11 @@ def valid_payload():
         "action_units": ["m", "m", "m", "rad"],
         "action_local_delta": [[0.2, 0.0, 0.1, 0.05]],
         "target_mission": [[1.2, 2.0, 1.1, 0.55]],
+        "action_chunk": [
+            [0.2, 0.0, 0.1, 0.05],
+            [0.2, 0.0, 0.0, 0.0],
+            [0.2, 0.0, 0.0, 0.0],
+        ],
     }
 
 
@@ -70,6 +82,111 @@ class ProtocolTest(unittest.TestCase):
         parsed = parse_command(valid_payload())
         self.assertEqual(parsed.policy, "pi05")
         self.assertEqual(parsed.target_mission, (1.2, 2.0, 1.1, 0.55))
+        self.assertEqual(len(parsed.action_chunk), 3)
+
+    def test_rejects_action_chunk_that_does_not_start_with_immediate_action(self):
+        payload = valid_payload()
+        payload["action_chunk"][0][0] = 0.3
+        with self.assertRaisesRegex(ProtocolError, "first row"):
+            parse_command(payload)
+
+    def test_rejects_action_chunk_over_onboard_horizon_limit(self):
+        payload = valid_payload()
+        payload["action_chunk"] = [payload["action_local_delta"][0]] * 11
+        with self.assertRaisesRegex(ProtocolError, "shape"):
+            parse_command(payload, max_action_chunk_steps=10)
+
+    def test_integrates_incremental_actions_from_capture_pose(self):
+        capture, targets = integrate_action_chunk(
+            (0.1, 0.0, 0.0, 0.0),
+            (1.1, 2.0, 1.0, 0.0),
+            ((0.1, 0.0, 0.0, 0.0), (0.1, 0.0, 0.0, 0.0)),
+        )
+        self.assertEqual(capture, (1.0, 2.0, 1.0, 0.0))
+        for actual, expected in zip(targets[-1], (1.2, 2.0, 1.0, 0.0)):
+            self.assertAlmostEqual(actual, expected)
+
+    def test_lookahead_discards_waypoints_passed_during_inference(self):
+        result = select_action_chunk_target(
+            (0.1, 0.0, 0.0, 0.0),
+            (0.1, 0.0, 1.0, 0.0),
+            (
+                (0.1, 0.0, 0.0, 0.0),
+                (0.1, 0.0, 0.0, 0.0),
+                (0.1, 0.0, 0.0, 0.0),
+            ),
+            (0.16, 0.0, 1.0, 0.0),
+            lookahead_distance_m=0.05,
+            max_cross_track_m=1.0,
+        )
+        self.assertEqual(result.selected_index, 2)
+        self.assertEqual(result.skipped_count, 2)
+        self.assertAlmostEqual(result.target[0], 0.3)
+
+    def test_lookahead_suppresses_fully_traversed_chunk(self):
+        result = select_action_chunk_target(
+            (0.1, 0.0, 0.0, 0.0),
+            (0.1, 0.0, 1.0, 0.0),
+            ((0.1, 0.0, 0.0, 0.0), (0.1, 0.0, 0.0, 0.0)),
+            (0.25, 0.0, 1.0, 0.0),
+            lookahead_distance_m=0.05,
+            max_cross_track_m=1.0,
+        )
+        self.assertIsNone(result.target)
+        self.assertIn("already traversed", result.reason)
+
+    def test_ten_step_chunk_can_be_sampled_to_six_or_eight_original_waypoints(self):
+        actions = tuple((0.1, 0.0, 0.0, 0.0) for _ in range(10))
+        for sample_count in (6, 8):
+            plan = build_action_chunk_plan(
+                actions[0],
+                (0.1, 0.0, 1.0, 0.0),
+                actions,
+                sample_count=sample_count,
+            )
+            self.assertEqual(len(plan.sampled_indices), sample_count)
+            self.assertEqual(plan.sampled_indices[0], 0)
+            self.assertEqual(plan.sampled_indices[-1], 9)
+            self.assertEqual(tuple(sorted(set(plan.sampled_indices))), plan.sampled_indices)
+
+    def test_sampled_chunk_advances_in_order_and_prunes_passed_waypoints(self):
+        actions = tuple((0.1, 0.0, 0.0, 0.0) for _ in range(10))
+        plan = build_action_chunk_plan(
+            actions[0],
+            (0.1, 0.0, 1.0, 0.0),
+            actions,
+            sample_count=6,
+        )
+        first = select_action_chunk_plan_target(
+            plan, (0.0, 0.0, 1.0, 0.0), 0.05, 0.5
+        )
+        advanced = select_action_chunk_plan_target(
+            plan, (0.55, 0.0, 1.0, 0.0), 0.05, 0.5
+        )
+        self.assertEqual(first.selected_sample_index, 0)
+        self.assertGreater(advanced.selected_sample_index, first.selected_sample_index)
+        self.assertGreater(advanced.skipped_count, 0)
+        self.assertLess(advanced.selected_index, 9)
+
+        complete = select_action_chunk_plan_target(
+            plan, (1.01, 0.0, 1.0, 0.0), 0.05, 0.5
+        )
+        self.assertIsNone(complete.target)
+        self.assertEqual(complete.skipped_count, 6)
+
+    def test_sampled_chunk_rejects_cross_track_deviation(self):
+        actions = tuple((0.1, 0.0, 0.0, 0.0) for _ in range(10))
+        plan = build_action_chunk_plan(
+            actions[0],
+            (0.1, 0.0, 1.0, 0.0),
+            actions,
+            sample_count=8,
+        )
+        result = select_action_chunk_plan_target(
+            plan, (0.2, 1.0, 1.0, 0.0), 0.05, 0.5
+        )
+        self.assertIsNone(result.target)
+        self.assertIn("outside", result.reason)
 
     def test_rejects_expired_command(self):
         payload = valid_payload()

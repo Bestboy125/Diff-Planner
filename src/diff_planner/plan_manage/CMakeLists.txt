@@ -51,6 +51,12 @@ target_link_libraries(diff_planner_node
 
 add_executable(traj_server src/traj_server.cpp)
 target_link_libraries(traj_server ${catkin_LIBRARIES})
+# Separate binary lets the VLA launcher adopt the fix on the next ground
+# restart without overwriting an executable currently controlling a vehicle.
+add_executable(traj_server_heading_hold src/traj_server.cpp)
+target_link_libraries(traj_server_heading_hold ${catkin_LIBRARIES})
+add_executable(traj_server_yaw_test EXCLUDE_FROM_ALL test/traj_server_yaw_test.cpp)
+target_link_libraries(traj_server_yaw_test ${catkin_LIBRARIES})
 # add_dependencies(traj_server ${${PROJECT_NAME}_EXPORTED_TARGETS})
 # add_executable(monitor_node src/monitor_node.cpp)
 # target_link_libraries(monitor_node ${catkin_LIBRARIES})

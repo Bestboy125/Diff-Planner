@@ -16,8 +16,26 @@ class DropInPackageTest(unittest.TestCase):
             "start_diff_planner_preview",
             "start_network_bridge",
             "start_observation_uplink",
+            "start_usb_camera",
         ):
             self.assertIn('name="{}" default="false"'.format(argument), launch)
+
+    def test_vla_camera_defaults_to_dedicated_kingsen_usb_topics(self):
+        stack = (PACKAGE_ROOT / "launch" / "vla_fastlio_diff_preview_stack.launch").read_text(
+            encoding="utf-8"
+        )
+        camera = (PACKAGE_ROOT / "launch" / "vla_usb_camera.launch").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('/vla_usb_camera/image_raw/compressed', stack)
+        self.assertIn('/vla_usb_camera/camera_info', stack)
+        self.assertIn('vla_usb_camera_optical_frame', stack)
+        self.assertIn('usb-KINGSEN_KS2A418-2.0-video-index0', camera)
+        self.assertIn('name="image_width" default="640"', camera)
+        self.assertIn('name="image_height" default="480"', camera)
+        self.assertIn('name="framerate" default="30"', camera)
+        for forbidden in ("mavros", "px4ctrl", "takeoff", "offboard"):
+            self.assertNotIn(forbidden, camera.lower())
 
     def test_unmodified_diff_planner_topics_are_isolated_by_absolute_remap(self):
         launch = (PACKAGE_ROOT / "launch" / "vla_fastlio_diff_preview_stack.launch").read_text(

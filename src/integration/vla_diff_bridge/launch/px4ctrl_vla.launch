@@ -1,0 +1,11 @@
+<launch>
+  <!-- Operator-requested workflow: an accepted TAKEOFF may arm and climb. -->
+  <node pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl" output="screen" required="true">
+    <remap from="~odom" to="/ekf/ekf_odom"/>
+    <remap from="~cmd" to="/setpoints_cmd"/>
+    <rosparam command="load" file="$(find px4ctrl)/config/ctrl_param_fpv.yaml"/>
+    <param name="auto_takeoff_land/takeoff_height" value="0.8" type="double"/>
+    <param name="auto_takeoff_land/enable_auto_arm" value="true" type="bool"/>
+    <param name="auto_takeoff_land/no_RC" value="false" type="bool"/>
+  </node>
+</launch>

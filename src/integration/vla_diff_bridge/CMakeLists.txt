@@ -5,6 +5,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   cv_bridge
   nav_msgs
+  mavros_msgs
   quadrotor_msgs
   rospy
   sensor_msgs
@@ -16,7 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_python_setup()
 
 catkin_package(
-  CATKIN_DEPENDS cv_bridge geometry_msgs nav_msgs quadrotor_msgs rospy sensor_msgs std_msgs tf tf2_ros
+  CATKIN_DEPENDS cv_bridge geometry_msgs nav_msgs mavros_msgs quadrotor_msgs rospy sensor_msgs std_msgs tf tf2_ros
 )
 
 catkin_install_python(PROGRAMS

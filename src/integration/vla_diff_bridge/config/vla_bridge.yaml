@@ -9,13 +9,23 @@ planning_preview_enabled: false
 operator_task_enabled: false
 world_frame: world
 body_frame: base_link
-camera_frame: camera_color_optical_frame
+camera_frame: vla_usb_camera_optical_frame
 expected_calibration_id: REQUIRED
 max_source_observation_age_ms: 1000
 max_ttl_ms: 2000
+action_chunk_lookahead_enabled: true
+max_action_chunk_steps: 10
+# Keep 6 or 8 original world-frame waypoints; send them sequentially, not in a burst.
+action_chunk_sample_count: 8
+action_chunk_lookahead_distance_m: 0.10
+action_chunk_max_cross_track_m: 1.0
 max_goal_step_m: 1.0
+max_operator_step_m: 2.0
 max_operator_yaw_rad: 1.5708
-takeoff_height_m: 1.0
+orbit_waypoint_spacing_m: 0.35
+orbit_arrival_tolerance_m: 0.20
+max_orbit_waypoints: 720
+takeoff_height_m: 0.8
 min_goal_z_m: 0.1
 max_goal_z_m: 2.0
 max_odom_age_ms: 250

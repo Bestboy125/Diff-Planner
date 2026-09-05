@@ -13,7 +13,7 @@
 
 ## TRACK 处理
 
-节点在持锁状态下检查任务是否冲突、sequence 是否递增、目标坐标系是否一致。随后要求最新 odom 不超过 `max_odom_age_ms`，计算当前位置到 `target_mission` 的三维距离，并检查单步距离和高度边界。通过后先发布 yaw，再发布 `/goal`，Diff-Planner 状态机将新目标交给 `planNextWaypoint()` 进行全局/局部轨迹更新。
+节点在持锁状态下检查任务是否冲突、sequence 是否递增、目标坐标系是否一致。若消息包含动作块，节点先从第一动作/目标恢复推理捕获位姿，逐步累计出固定世界系轨迹，再用最新 odom 投影实际进度并剔除已经通过的前缀航点。整块已过期或横向偏差超限时不发布目标。随后对筛选出的目标检查最新 odom、单步距离和高度边界；通过后先发布 yaw，再发布 `/goal`，Diff-Planner 状态机将新目标交给 `planNextWaypoint()` 进行全局/局部轨迹更新。
 
 ## HOLD 与 COMPLETE
 

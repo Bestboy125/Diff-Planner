@@ -61,11 +61,11 @@ rospack find vla_diff_bridge
 ```bash
 rostopic type /ekf/ekf_odom
 rostopic type /laserMapping/cloud_registered
-rostopic type /camera/color/image_raw/compressed
-rostopic type /camera/color/camera_info
+rostopic type /vla_usb_camera/image_raw/compressed
+rostopic type /vla_usb_camera/camera_info
 rostopic echo -n 1 /ekf/ekf_odom/header
-rostopic echo -n 1 /camera/color/camera_info
-rosrun tf tf_echo base_link camera_color_optical_frame
+rostopic echo -n 1 /vla_usb_camera/camera_info
+rosrun tf tf_echo base_link vla_usb_camera_optical_frame
 ```
 
 需要记录：实际话题名、消息类型、world/body/camera frame、图像分辨率、K/D、`T_body_camera`、时间戳来源和各话题频率。所有数值确认后才生成 calibration ID，并将 `calibration_validated` 改为 `true`。
