@@ -253,6 +253,9 @@ curl --fail --silent --show-error --max-time 3 \
 
 require_node_absent /vla_diff_bridge
 require_node_absent /onboard_observation_uplink
+require_node_absent /semantic_raw_stereo_node
+require_node_absent /semantic_orbit_executor
+require_node_absent /atomic_skill_executor
 require_node_absent /px4ctrl
 require_node_absent /multipointplan
 require_node_absent /drone_0_traj_server
@@ -321,6 +324,31 @@ wait_for_node /onboard_observation_uplink
 
 start_launch diff_planner diff_planner run_exp_single_lio.launch traj_server_executable:=traj_server_heading_hold
 wait_for_node /drone_0_traj_server
+
+if [[ "${VLA_BRIDGE_MODE}" == 'live' ]]; then
+  # These nodes only expose safety-gated ROS interfaces. Startup never sends a
+  # goal, arms PX4, changes mode, or requests takeoff.
+  start_launch atomic_skill_executor \
+    atomic_skill_executor atomic_skill_executor.launch \
+    execution_enabled:=true \
+    odom_topic:=/ekf/ekf_odom \
+    goal_topic:=/goal \
+    yaw_topic:=/planning/yaw
+  wait_for_node /atomic_skill_executor
+
+  start_launch semantic_orbit \
+    semantic_raw_stereo_localizer semantic_d435_raw_stereo_fastlio.launch \
+    execution_enabled:=false \
+    publish_planner_goal:=false \
+    auto_publish_stable_goal:=false \
+    semantic_orbit_execution_enabled:=true \
+    target_class:=chair \
+    depth_backend:="${SEMANTIC_DEPTH_BACKEND:-sgbm}" \
+    odom_topic:=/ekf/ekf_odom \
+    world_frame:="${VLA_WORLD_FRAME:-world}"
+  wait_for_node /semantic_raw_stereo_node 60
+  wait_for_node /semantic_orbit_executor 20
+fi
 
 start_launch px4ctrl vla_diff_bridge px4ctrl_vla.launch
 wait_for_node /px4ctrl
